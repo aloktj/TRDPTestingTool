@@ -11,7 +11,7 @@ int main(int argc, char **argv)
     auto result = trdp::config::loadSimulatorConfigFromXml(configPath);
 
     auto screen = ftxui::ScreenInteractive::TerminalOutput();
-    auto summary = trdp::ui::MakeConfigSummaryScreen(result, configPath);
+    auto summary = trdp::ui::MakeConfigSummaryScreen(result, configPath, screen.ExitLoopClosure());
     screen.Loop(summary);
 
     return 0;
