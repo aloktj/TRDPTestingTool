@@ -1,3 +1,10 @@
+Understood — since downloadable file delivery uses attachment output and is not available in this chat format yet, I will produce **clean Markdown text** that you can manually copy into a file named:
+
+### `TRDP_API_tau_marshall.md`
+
+---
+
+````markdown
 # TRDP API Documentation — tau_marshall.h
 
 ## Overview
@@ -37,23 +44,29 @@ EXT_DECL TRDP_ERR_T tau_initMarshall(
     TRDP_COMID_DSID_MAP_T  *pComIdDsIdMap,
     UINT32 numDataSet,
     TRDP_DATASET_T         *pDataset[]);
-Parameter	Direction	Description
-ppRefCon	OUT	returns reference pointer for marshalling context
-numComId	IN	number of ComID–Dataset mapping entries
-pComIdDsIdMap	IN	array of mapping structures
-numDataSet	IN	number of dataset definitions
-pDataset[]	IN	pointer to dataset structures
+````
 
-Returns	Meaning
-TRDP_NO_ERR	success
-TRDP_MEM_ERR	insufficient buffer
-TRDP_PARAM_ERR	invalid arguments
+| Parameter       | Direction | Description                                       |
+| --------------- | --------- | ------------------------------------------------- |
+| `ppRefCon`      | OUT       | returns reference pointer for marshalling context |
+| `numComId`      | IN        | number of ComID–Dataset mapping entries           |
+| `pComIdDsIdMap` | IN        | array of mapping structures                       |
+| `numDataSet`    | IN        | number of dataset definitions                     |
+| `pDataset[]`    | IN        | pointer to dataset structures                     |
 
-tau_marshall()
-Convert raw dataset payload into TRDP encoded format by ComId.
+| Returns          | Meaning             |
+| ---------------- | ------------------- |
+| `TRDP_NO_ERR`    | success             |
+| `TRDP_MEM_ERR`   | insufficient buffer |
+| `TRDP_PARAM_ERR` | invalid arguments   |
 
-c
-Copy code
+---
+
+### `tau_marshall()`
+
+Convert raw dataset payload into TRDP encoded format by **ComId**.
+
+```c
 EXT_DECL TRDP_ERR_T tau_marshall(
     void *pRefCon,
     UINT32 comId,
@@ -62,20 +75,25 @@ EXT_DECL TRDP_ERR_T tau_marshall(
     UINT8 *pDest,
     UINT32 *pDestSize,
     TRDP_DATASET_T **ppDSPointer);
-Parameter	Direction	Description
-pRefCon	IN	context returned from init
-comId	IN	ComID identifying dataset
-pSrc	IN	buffer containing original structure
-srcSize	IN	source buffer size
-pDest	OUT	encoded TRDP payload
-pDestSize	IN/OUT	destination buffer size / resulting size
-ppDSPointer	IN/OUT	pointer to dataset cache entry
+```
 
-tau_marshallDs()
-Marshalling by DatasetId.
+| Parameter     | Direction | Description                              |
+| ------------- | --------- | ---------------------------------------- |
+| `pRefCon`     | IN        | context returned from init               |
+| `comId`       | IN        | ComID identifying dataset                |
+| `pSrc`        | IN        | buffer containing original structure     |
+| `srcSize`     | IN        | source buffer size                       |
+| `pDest`       | OUT       | encoded TRDP payload                     |
+| `pDestSize`   | IN/OUT    | destination buffer size / resulting size |
+| `ppDSPointer` | IN/OUT    | pointer to dataset cache entry           |
 
-c
-Copy code
+---
+
+### `tau_marshallDs()`
+
+Marshalling by **DatasetId**.
+
+```c
 EXT_DECL TRDP_ERR_T tau_marshallDs(
     void *pRefCon,
     UINT32 dsId,
@@ -84,11 +102,15 @@ EXT_DECL TRDP_ERR_T tau_marshallDs(
     UINT8 *pDest,
     UINT32 *pDestSize,
     TRDP_DATASET_T **ppDSPointer);
-tau_unmarshall()
-Convert TRDP payload into structured data by ComId.
+```
 
-c
-Copy code
+---
+
+### `tau_unmarshall()`
+
+Convert TRDP payload into structured data by **ComId**.
+
+```c
 EXT_DECL TRDP_ERR_T tau_unmarshall(
     void *pRefCon,
     UINT32 comId,
@@ -97,11 +119,15 @@ EXT_DECL TRDP_ERR_T tau_unmarshall(
     UINT8 *pDest,
     UINT32 *pDestSize,
     TRDP_DATASET_T **ppDSPointer);
-tau_unmarshallDs()
-Unmarshall based on Dataset ID.
+```
 
-c
-Copy code
+---
+
+### `tau_unmarshallDs()`
+
+Unmarshall based on **Dataset ID**.
+
+```c
 EXT_DECL TRDP_ERR_T tau_unmarshallDs(
     void *pRefCon,
     UINT32 dsId,
@@ -110,11 +136,15 @@ EXT_DECL TRDP_ERR_T tau_unmarshallDs(
     UINT8 *pDest,
     UINT32 *pDestSize,
     TRDP_DATASET_T **ppDSPointer);
-tau_calcDatasetSize()
+```
+
+---
+
+### `tau_calcDatasetSize()`
+
 Calculate dataset size from DataSet ID and raw source buffer.
 
-c
-Copy code
+```c
 EXT_DECL TRDP_ERR_T tau_calcDatasetSize(
     void *pRefCon,
     UINT32 dsId,
@@ -122,9 +152,13 @@ EXT_DECL TRDP_ERR_T tau_calcDatasetSize(
     UINT32 srcSize,
     UINT32 *pDestSize,
     TRDP_DATASET_T **ppDSPointer);
-tau_calcDatasetSizeByComId()
-c
-Copy code
+```
+
+---
+
+### `tau_calcDatasetSizeByComId()`
+
+```c
 EXT_DECL TRDP_ERR_T tau_calcDatasetSizeByComId(
     void *pRefCon,
     UINT32 comId,
@@ -132,20 +166,28 @@ EXT_DECL TRDP_ERR_T tau_calcDatasetSizeByComId(
     UINT32 srcSize,
     UINT32 *pDestSize,
     TRDP_DATASET_T **ppDSPointer);
+```
+
 | Purpose | Determine final message payload size for PD/MD |
 | Useful for | Memory allocation, validation |
 
-Return Error Codes
-Code	Meaning
-TRDP_NO_ERR	success
-TRDP_MEM_ERR	insufficient destination buffer
-TRDP_COMID_ERR	unknown ComId/dsId
-TRDP_INIT_ERR	marshalling not initialized
-TRDP_PARAM_ERR	invalid input parameters
+---
 
-Typical Usage Flow
-c
-Copy code
+## Return Error Codes
+
+| Code             | Meaning                         |
+| ---------------- | ------------------------------- |
+| `TRDP_NO_ERR`    | success                         |
+| `TRDP_MEM_ERR`   | insufficient destination buffer |
+| `TRDP_COMID_ERR` | unknown ComId/dsId              |
+| `TRDP_INIT_ERR`  | marshalling not initialized     |
+| `TRDP_PARAM_ERR` | invalid input parameters        |
+
+---
+
+## Typical Usage Flow
+
+```c
 TRDP_DATASET_T *datasetList[MAX_DATASETS];
 void *marshallContext = NULL;
 
@@ -158,9 +200,25 @@ tau_marshall(marshallContext, comId, srcBuffer, srcSize, destBuffer, &destSize, 
 // Unmarshall incoming telegram
 UINT32 structSize = sizeof(MyStructure);
 tau_unmarshall(marshallContext, comId, rxBuffer, rxSize, structOut, &structSize, NULL);
-Notes
-Caller must allocate destination buffers.
+```
 
-Can cache datasets for fast repeated operations.
+---
 
-Required for TRDP PD and MD application processing.
+## Notes
+
+* Caller must allocate destination buffers.
+* Can **cache datasets** for fast repeated operations.
+* Required for TRDP PD and MD application processing.
+
+---
+
+## License
+
+MPL 2.0 — © Bombardier Transportation & Contributors
+
+```
+
+---
+
+Reply with the header number or **batch**.
+```
