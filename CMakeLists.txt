@@ -28,25 +28,41 @@ set(
 )
 set(
     TAU_XML_LIBRARIES
-    TRDP::trdp
+    tau_shared
     CACHE STRING "Linker flags or libraries for tau_xml"
 )
 add_library(tau_xml INTERFACE)
  target_include_directories(tau_xml INTERFACE ${TAU_XML_INCLUDE_DIR})
  target_link_libraries(tau_xml INTERFACE ${TAU_XML_LIBRARIES})
 
+add_library(trdp_config STATIC
+    src/config/xml_loader.cpp
+)
+target_include_directories(trdp_config PUBLIC src)
+target_link_libraries(trdp_config PUBLIC tau_xml TRDP::trdp)
+
 add_executable(trdp_simulator
     src/main.cpp
-    src/config/xml_loader.cpp
     src/ui/screen_config_summary.cpp
 )
+target_include_directories(trdp_simulator PRIVATE src)
 
 target_link_libraries(
     trdp_simulator
     PRIVATE
+        trdp_config
         tau_xml
-        TRDP::trdp
         ftxui::component
         ftxui::dom
         ftxui::screen
 )
+
+enable_testing()
+
+add_executable(xml_loader_test
+    tests/xml_loader_test.cpp
+)
+target_include_directories(xml_loader_test PRIVATE src)
+target_link_libraries(xml_loader_test PRIVATE trdp_config tau_xml)
+
+add_test(NAME xml_loader_test COMMAND xml_loader_test)

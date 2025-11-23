@@ -105,8 +105,8 @@ model::Dataset convertDataset(const TRDP_DATASET_T &dataset)
     {
         const auto &element = dataset.pElement[i];
         model::DatasetElement converted{};
-        converted.name = element.name;
-        converted.arraySize = element.arraySize;
+        converted.name = element.name != nullptr ? element.name : "";
+        converted.arraySize = element.size;
         converted.type = std::to_string(element.type);
         result.elements.push_back(converted);
     }
@@ -176,9 +176,19 @@ SimulatorConfigLoadResult loadSimulatorConfigFromXml(const std::string &path)
         interfaceCfg.hostIp = toIpString(iface.hostIp);
         interfaceCfg.leaderIp = toIpString(iface.leaderIp);
 
+        TRDP_PROCESS_CONFIG_T processConfig{};
+        TRDP_PD_CONFIG_T pdConfig{};
+        TRDP_MD_CONFIG_T mdConfig{};
         TRDP_EXCHG_PAR_T *pExchgPar = nullptr;
         UINT32 numExchgPar = 0U;
-        const auto ifErr = tau_readXmlInterfaceConfig(&docHandle, iface.ifName, nullptr, nullptr, nullptr, &numExchgPar, &pExchgPar);
+        const auto ifErr = tau_readXmlInterfaceConfig(
+            &docHandle,
+            iface.ifName,
+            &processConfig,
+            &pdConfig,
+            &mdConfig,
+            &numExchgPar,
+            &pExchgPar);
         if (ifErr == TRDP_NO_ERR)
         {
             for (std::uint32_t t = 0; t < numExchgPar; ++t)
