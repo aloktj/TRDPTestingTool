@@ -66,6 +66,7 @@ target_link_libraries(trdp_runtime PUBLIC trdp_config)
 add_executable(trdp_simulator
     src/main.cpp
     src/ui/screen_config_summary.cpp
+    src/ui/tui_app.cpp
 )
 target_include_directories(trdp_simulator PRIVATE src)
 

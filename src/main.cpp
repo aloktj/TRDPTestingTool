@@ -1,5 +1,5 @@
 #include "config/xml_loader.h"
-#include "ui/screen_config_summary.h"
+#include "ui/tui_app.h"
 
 #include <ftxui/component/screen_interactive.hpp>
 #include <iostream>
@@ -11,8 +11,8 @@ int main(int argc, char **argv)
     auto result = trdp::config::loadSimulatorConfigFromXml(configPath);
 
     auto screen = ftxui::ScreenInteractive::TerminalOutput();
-    auto summary = trdp::ui::MakeConfigSummaryScreen(result, configPath, screen.ExitLoopClosure());
-    screen.Loop(summary);
+    auto app = trdp::ui::MakeTuiApp(result, configPath, screen.ExitLoopClosure());
+    screen.Loop(app);
 
     return 0;
 }
