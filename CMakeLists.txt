@@ -75,3 +75,11 @@ target_include_directories(xml_loader_test PRIVATE src)
 target_link_libraries(xml_loader_test PRIVATE trdp_config tau_xml)
 
 add_test(NAME xml_loader_test COMMAND xml_loader_test)
+
+add_executable(trdp_runtime_test
+    tests/trdp_runtime_test.cpp
+)
+target_include_directories(trdp_runtime_test PRIVATE src)
+target_link_libraries(trdp_runtime_test PRIVATE trdp_runtime trdp_config tau_xml)
+
+add_test(NAME trdp_runtime_test COMMAND trdp_runtime_test)
