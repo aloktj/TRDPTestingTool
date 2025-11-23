@@ -55,7 +55,7 @@ void PdEndpointRuntime::startPublishing(std::chrono::milliseconds cycleTime)
     lastPublish_.reset();
 
     destIp_ = resolveDestinationIp();
-    auto payload = makePayload(0U);
+    auto payload = buildPayload(0U);
 
     const auto intervalUs = static_cast<UINT32>(std::max<std::int64_t>(1, cycleTime.count()) * 1000);
     const auto pubErr = tlp_publish(
@@ -171,6 +171,34 @@ void PdEndpointRuntime::setSubscriptionSink(SubscriptionSink sink)
     subscriptionSink_ = std::move(sink);
 }
 
+void PdEndpointRuntime::setFixedPayload(std::vector<std::uint8_t> payload)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    fixedPayload_ = std::move(payload);
+}
+
+void PdEndpointRuntime::clearFixedPayload()
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    fixedPayload_.reset();
+}
+
+bool PdEndpointRuntime::hasFixedPayload() const
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    return fixedPayload_.has_value();
+}
+
+std::optional<std::size_t> PdEndpointRuntime::fixedPayloadSize() const
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (fixedPayload_)
+    {
+        return fixedPayload_->size();
+    }
+    return std::nullopt;
+}
+
 void PdEndpointRuntime::publishLoop(std::chrono::milliseconds cycleTime)
 {
     std::unique_lock<std::mutex> lock(mutex_);
@@ -185,7 +213,7 @@ void PdEndpointRuntime::publishLoop(std::chrono::milliseconds cycleTime)
 
         lastPublish_ = std::chrono::system_clock::now();
         const auto count = publishCount_.fetch_add(1) + 1;
-        auto payload = makePayload(count);
+        auto payload = buildPayload(count);
 
         lock.unlock();
         const auto err = tlp_put(
@@ -201,6 +229,17 @@ void PdEndpointRuntime::publishLoop(std::chrono::milliseconds cycleTime)
         }
         lock.lock();
     }
+}
+
+std::vector<std::uint8_t> PdEndpointRuntime::buildPayload(std::uint64_t count)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (fixedPayload_)
+    {
+        return *fixedPayload_;
+    }
+
+    return makePayload(count);
 }
 
 TRDP_IP_ADDR_T PdEndpointRuntime::resolveDestinationIp() const

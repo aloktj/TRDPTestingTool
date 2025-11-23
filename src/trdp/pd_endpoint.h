@@ -38,9 +38,15 @@ public:
     void handleSubscription(const PdMessage &message);
     void setSubscriptionSink(SubscriptionSink sink);
 
+    void setFixedPayload(std::vector<std::uint8_t> payload);
+    void clearFixedPayload();
+    [[nodiscard]] bool hasFixedPayload() const;
+    [[nodiscard]] std::optional<std::size_t> fixedPayloadSize() const;
+
 private:
     void publishLoop(std::chrono::milliseconds cycleTime);
     TRDP_IP_ADDR_T resolveDestinationIp() const;
+    std::vector<std::uint8_t> buildPayload(std::uint64_t count);
 
     model::TelegramConfig config_;
     std::shared_ptr<TrdpSession> session_;
@@ -50,6 +56,7 @@ private:
     std::atomic<bool> running_{false};
     std::atomic<std::uint64_t> publishCount_{0};
     std::optional<std::chrono::system_clock::time_point> lastPublish_;
+    std::optional<std::vector<std::uint8_t>> fixedPayload_{};
     std::condition_variable cv_;
     mutable std::mutex mutex_;
     SubscriptionSink subscriptionSink_{};

@@ -13,6 +13,36 @@
 
 namespace trdp::ui
 {
+void SimulatorRuntimeContext::shutdown()
+{
+    if (shutdownRequested)
+    {
+        return;
+    }
+
+    shutdownRequested = true;
+    for (auto &row : pdRows)
+    {
+        if (row.runtime)
+        {
+            row.runtime->stopPublishing();
+        }
+    }
+
+    for (auto &session : sessions)
+    {
+        if (session)
+        {
+            session->close();
+        }
+    }
+}
+
+SimulatorRuntimeContext::~SimulatorRuntimeContext()
+{
+    shutdown();
+}
+
 namespace
 {
 ftxui::Element BuildInterfacePanel(const model::InterfaceConfig &iface)
@@ -83,127 +113,21 @@ ftxui::Element BuildDatasetPanel(const config::SimulatorConfigLoadResult &result
 
 ftxui::Component MakeConfigSummaryScreen(const config::SimulatorConfigLoadResult &result,
                                          const std::string &sourcePath,
+                                         const std::shared_ptr<SimulatorRuntimeContext> &runtime,
                                          std::function<void()> onQuit)
 {
     using namespace ftxui; // NOLINT
 
-    struct TelegramRuntimeRow
-    {
-        model::TelegramConfig config;
-        std::shared_ptr<runtime::PdEndpointRuntime> runtime;
-        std::shared_ptr<std::string> cycleInput;
-        Component rowRenderer;
-    };
-
-    struct State
-    {
-        std::vector<std::shared_ptr<runtime::TrdpSession>> sessions;
-        std::vector<TelegramRuntimeRow> runtimeRows;
-        std::shared_ptr<std::vector<std::string>> subscriberLog = std::make_shared<std::vector<std::string>>();
-        bool shutdownRequested{false};
-
-        void shutdown()
-        {
-            if (shutdownRequested)
-            {
-                return;
-            }
-
-            shutdownRequested = true;
-            for (auto &row : runtimeRows)
-            {
-                if (row.runtime)
-                {
-                    row.runtime->stopPublishing();
-                }
-            }
-
-            for (auto &session : sessions)
-            {
-                if (session)
-                {
-                    session->close();
-                }
-            }
-        }
-
-        ~State()
-        {
-            shutdown();
-        }
-    };
-
-    auto state = std::make_shared<State>();
-
-    for (const auto &iface : result.config.interfaces)
-    {
-        auto session = std::make_shared<runtime::TrdpSession>(runtime::TrdpSessionConfig{
-            iface.hostIp,
-            iface.leaderIp,
-            iface.networkId,
-        });
-        session->open();
-        state->sessions.push_back(session);
-
-        for (const auto &telegram : iface.telegrams)
-        {
-            auto runtime = std::make_shared<runtime::PdEndpointRuntime>(telegram, session);
-            session->registerPdSubscriber(telegram.comId, [runtime](const runtime::PdMessage &message) {
-                runtime->handleSubscription(message);
-            });
-
-            runtime->setSubscriptionSink([subscriberLog = state->subscriberLog, telegram](const runtime::PdMessage &message) {
-                std::ostringstream oss;
-                oss << util::formatTimestamp(message.timestamp) << " | ComID " << telegram.comId << " → Dataset "
-                    << telegram.datasetId << " | " << message.payload.size() << " bytes";
-                subscriberLog->push_back(oss.str());
-                if (subscriberLog->size() > 50U)
-                {
-                    subscriberLog->erase(subscriberLog->begin());
-                }
-            });
-
-            auto cycleInput = std::make_shared<std::string>("1000");
-            auto cycleInputComponent = Input(cycleInput.get(), "cycle ms");
-            auto startButton = Button("Start", [runtime, cycleInput] {
-                const auto ms = std::max(1L, std::strtol(cycleInput->c_str(), nullptr, 10));
-                runtime->startPublishing(std::chrono::milliseconds(ms));
-            });
-            auto stopButton = Button("Stop", [runtime] { runtime->stopPublishing(); });
-            auto controls = Container::Horizontal({cycleInputComponent, startButton, stopButton});
-
-            auto rowRenderer = Renderer(controls, [runtime, telegram, controls] {
-                const auto lastPublish = runtime->lastPublishTime();
-                std::string status = runtime->isPublishing() ? "Publishing" : "Stopped";
-                if (lastPublish)
-                {
-                    status += " | last: " + util::formatTimestamp(*lastPublish);
-                }
-                status += " | count: " + std::to_string(runtime->publishCount());
-
-                return hbox({
-                    text("ComID " + std::to_string(telegram.comId) + " (Dataset " + std::to_string(telegram.datasetId) + ")"),
-                    separator(),
-                    controls->Render() | xflex,
-                    separator(),
-                    text(status),
-                });
-            });
-
-            state->runtimeRows.push_back({telegram, runtime, cycleInput, rowRenderer});
-        }
-    }
-
     std::vector<Component> controlRows;
-    controlRows.reserve(state->runtimeRows.size());
-    for (auto &row : state->runtimeRows)
+    controlRows.reserve(runtime->pdRows.size());
+    for (auto &row : runtime->pdRows)
     {
         controlRows.push_back(row.rowRenderer);
     }
 
     auto controlContainer = Container::Vertical(controlRows);
 
-    auto summaryRenderer = Renderer(controlContainer, [result, sourcePath, state, controlContainer] {
+    auto summaryRenderer = Renderer(controlContainer, [result, sourcePath, runtime, controlContainer] {
         std::vector<Element> sections;
         sections.push_back(text("Configuration source: " + sourcePath));
         sections.push_back(text("Press 'q' or Esc to quit") | color(Color::Yellow));
@@ -229,20 +153,20 @@ ftxui::Component MakeConfigSummaryScreen(const config::SimulatorConfigLoadResult
         }
 
         std::vector<Element> controlRenders;
-        if (state->runtimeRows.empty())
+        if (runtime->pdRows.empty())
         {
             controlRenders.push_back(text("No PD telegrams available."));
         }
         else
         {
-            for (const auto &row : state->runtimeRows)
+            for (const auto &row : runtime->pdRows)
             {
                 controlRenders.push_back(row.rowRenderer->Render());
             }
         }
 
         std::vector<Element> subscriberRows;
-        for (const auto &entry : *state->subscriberLog)
+        for (const auto &entry : *runtime->subscriberLog)
         {
             subscriberRows.push_back(text(entry));
         }
@@ -259,10 +183,13 @@ ftxui::Component MakeConfigSummaryScreen(const config::SimulatorConfigLoadResult
         return vbox(sections) | border | flex;
     });
 
-    auto quittingRenderer = CatchEvent(summaryRenderer, [state, onQuit](const Event &event) {
+    auto quittingRenderer = CatchEvent(summaryRenderer, [runtime, onQuit](const Event &event) {
         if (event == Event::Character('q') || event == Event::Character('Q') || event == Event::Escape)
         {
-            state->shutdown();
+            if (runtime)
+            {
+                runtime->shutdown();
+            }
             if (onQuit)
             {
                 onQuit();
