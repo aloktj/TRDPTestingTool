@@ -48,6 +48,7 @@ trdp/	PD/MD runtime layer wrapping TRDP stack APIs.
 config/	XML parsing using tau_xml, conversion to internal model.
 model/	Pure C++ configuration & dataset structures.
 util/	Logging, error helpers, TRDP string conversion utilities.
+docs/	TRDP API reference Markdown files (tau_*.md, trdp_*.md).
 3. Directory Structure
 src/
   main.cpp
