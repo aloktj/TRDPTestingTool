@@ -6,6 +6,18 @@ option(TRDP_ENABLE_TESTS "Build TRDPTestingTool test targets" ON)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Ensure required submodules are present to avoid missing-header build failures.
+set(TRDP_FTXUI_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/external/FTXUI")
+set(TRDP_TCNOPEN_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/external/TCNopen")
+
+if(NOT EXISTS "${TRDP_FTXUI_ROOT}/CMakeLists.txt")
+    message(FATAL_ERROR "FTXUI submodule not found. Please run: git submodule update --init --recursive")
+endif()
+
+if(NOT EXISTS "${TRDP_TCNOPEN_ROOT}/CMakeLists.txt")
+    message(FATAL_ERROR "TCNopen submodule not found. Please run: git submodule update --init --recursive")
+endif()
+
 # FTXUI configuration
 set(FTXUI_BUILD_EXAMPLES OFF CACHE BOOL "Disable upstream examples" FORCE)
 set(FTXUI_BUILD_TESTS OFF CACHE BOOL "Disable upstream tests" FORCE)
