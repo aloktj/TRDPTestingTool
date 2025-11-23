@@ -5,7 +5,6 @@
 
 #include <algorithm>
 #include <cstdlib>
-#include <ftxui/component/button.hpp>
 #include <ftxui/component/component.hpp>
 #include <ftxui/component/input.hpp>
 #include <ftxui/component/screen_interactive.hpp>

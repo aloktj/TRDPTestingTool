@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.16)
 project(TRDPTestingTool LANGUAGES CXX)
 
+option(TRDP_ENABLE_TESTS "Build TRDPTestingTool test targets" ON)
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -66,20 +68,29 @@ target_link_libraries(
         ftxui::screen
 )
 
-enable_testing()
+if(TRDP_ENABLE_TESTS)
+    set(BUILD_TESTING ON CACHE BOOL "Enable CTest-based targets" FORCE)
+    include(CTest)
+    enable_testing()
 
-add_executable(xml_loader_test
-    tests/xml_loader_test.cpp
-)
-target_include_directories(xml_loader_test PRIVATE src)
-target_link_libraries(xml_loader_test PRIVATE trdp_config tau_xml)
+    add_executable(xml_loader_test EXCLUDE_FROM_ALL
+        tests/xml_loader_test.cpp
+    )
+    target_include_directories(xml_loader_test PRIVATE src)
+    target_link_libraries(xml_loader_test PRIVATE trdp_config tau_xml)
 
-add_test(NAME xml_loader_test COMMAND xml_loader_test)
+    add_executable(trdp_runtime_test EXCLUDE_FROM_ALL
+        tests/trdp_runtime_test.cpp
+    )
+    target_include_directories(trdp_runtime_test PRIVATE src)
+    target_link_libraries(trdp_runtime_test PRIVATE trdp_runtime trdp_config tau_xml)
 
-add_executable(trdp_runtime_test
-    tests/trdp_runtime_test.cpp
-)
-target_include_directories(trdp_runtime_test PRIVATE src)
-target_link_libraries(trdp_runtime_test PRIVATE trdp_runtime trdp_config tau_xml)
+    add_custom_target(trdp_tests DEPENDS xml_loader_test trdp_runtime_test)
 
-add_test(NAME trdp_runtime_test COMMAND trdp_runtime_test)
+    add_test(NAME xml_loader_test COMMAND xml_loader_test)
+    add_test(NAME trdp_runtime_test COMMAND trdp_runtime_test)
+
+    if(TARGET test)
+        add_dependencies(test trdp_tests)
+    endif()
+endif()
