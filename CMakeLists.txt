@@ -21,19 +21,48 @@ set(TRDP_BUILD_MARSHALLING_TOOLS OFF CACHE BOOL "Disable TRDP marshalling demos"
 add_subdirectory(external/TCNopen)
 
 # tau_xml configuration hook
-set(TAU_XML_INCLUDE_DIR "" CACHE PATH "Path to tau_xml headers")
-set(TAU_XML_LIBRARIES "" CACHE STRING "Linker flags or libraries for tau_xml")
+set(
+    TAU_XML_INCLUDE_DIR
+    "${CMAKE_CURRENT_SOURCE_DIR}/external/TCNopen/trdp/src/api"
+    CACHE PATH "Path to tau_xml headers"
+)
+set(
+    TAU_XML_LIBRARIES
+    tau_shared
+    CACHE STRING "Linker flags or libraries for tau_xml"
+)
 add_library(tau_xml INTERFACE)
-target_include_directories(tau_xml INTERFACE ${TAU_XML_INCLUDE_DIR})
-target_link_libraries(tau_xml INTERFACE ${TAU_XML_LIBRARIES})
+ target_include_directories(tau_xml INTERFACE ${TAU_XML_INCLUDE_DIR})
+ target_link_libraries(tau_xml INTERFACE ${TAU_XML_LIBRARIES})
 
-add_executable(trdp_simulator src/main.cpp)
+add_library(trdp_config STATIC
+    src/config/xml_loader.cpp
+)
+target_include_directories(trdp_config PUBLIC src)
+target_link_libraries(trdp_config PUBLIC tau_xml TRDP::trdp)
+
+add_executable(trdp_simulator
+    src/main.cpp
+    src/ui/screen_config_summary.cpp
+)
+target_include_directories(trdp_simulator PRIVATE src)
+
 target_link_libraries(
     trdp_simulator
     PRIVATE
+        trdp_config
         tau_xml
-        TRDP::trdp
         ftxui::component
         ftxui::dom
         ftxui::screen
 )
+
+enable_testing()
+
+add_executable(xml_loader_test
+    tests/xml_loader_test.cpp
+)
+target_include_directories(xml_loader_test PRIVATE src)
+target_link_libraries(xml_loader_test PRIVATE trdp_config tau_xml)
+
+add_test(NAME xml_loader_test COMMAND xml_loader_test)

@@ -1,6 +1,6 @@
 [submodule "external/FTXUI"]
-	path = external/FTXUI
-	url = git@github.com:aloktj/FTXUI.git
+path = external/FTXUI
+url = https://github.com/aloktj/FTXUI.git
 [submodule "external/TCNopen"]
-	path = external/TCNopen
-	url = git@github.com:aloktj/TCNopen.git
+path = external/TCNopen
+url = https://github.com/aloktj/TCNopen.git
