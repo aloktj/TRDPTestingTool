@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cstdlib>
 #include <ftxui/component/component.hpp>
+#include <ftxui/component/event.hpp>
 #include <ftxui/dom/elements.hpp>
 #include <memory>
 #include <sstream>
@@ -80,7 +81,9 @@ ftxui::Element BuildDatasetPanel(const config::SimulatorConfigLoadResult &result
 }
 }
 
-ftxui::Component MakeConfigSummaryScreen(const config::SimulatorConfigLoadResult &result, const std::string &sourcePath)
+ftxui::Component MakeConfigSummaryScreen(const config::SimulatorConfigLoadResult &result,
+                                         const std::string &sourcePath,
+                                         std::function<void()> onQuit)
 {
     using namespace ftxui; // NOLINT
 
@@ -92,9 +95,45 @@ ftxui::Component MakeConfigSummaryScreen(const config::SimulatorConfigLoadResult
         Component rowRenderer;
     };
 
-    std::vector<std::shared_ptr<runtime::TrdpSession>> sessions;
-    std::vector<TelegramRuntimeRow> runtimeRows;
-    auto subscriberLog = std::make_shared<std::vector<std::string>>();
+    struct State
+    {
+        std::vector<std::shared_ptr<runtime::TrdpSession>> sessions;
+        std::vector<TelegramRuntimeRow> runtimeRows;
+        std::shared_ptr<std::vector<std::string>> subscriberLog = std::make_shared<std::vector<std::string>>();
+        bool shutdownRequested{false};
+
+        void shutdown()
+        {
+            if (shutdownRequested)
+            {
+                return;
+            }
+
+            shutdownRequested = true;
+            for (auto &row : runtimeRows)
+            {
+                if (row.runtime)
+                {
+                    row.runtime->stopPublishing();
+                }
+            }
+
+            for (auto &session : sessions)
+            {
+                if (session)
+                {
+                    session->close();
+                }
+            }
+        }
+
+        ~State()
+        {
+            shutdown();
+        }
+    };
+
+    auto state = std::make_shared<State>();
 
     for (const auto &iface : result.config.interfaces)
     {
@@ -104,7 +143,7 @@ ftxui::Component MakeConfigSummaryScreen(const config::SimulatorConfigLoadResult
             iface.networkId,
         });
         session->open();
-        sessions.push_back(session);
+        state->sessions.push_back(session);
 
         for (const auto &telegram : iface.telegrams)
         {
@@ -113,7 +152,7 @@ ftxui::Component MakeConfigSummaryScreen(const config::SimulatorConfigLoadResult
                 runtime->handleSubscription(message);
             });
 
-            runtime->setSubscriptionSink([subscriberLog, telegram](const runtime::PdMessage &message) {
+            runtime->setSubscriptionSink([subscriberLog = state->subscriberLog, telegram](const runtime::PdMessage &message) {
                 std::ostringstream oss;
                 oss << util::formatTimestamp(message.timestamp) << " | ComID " << telegram.comId << " → Dataset "
                     << telegram.datasetId << " | " << message.payload.size() << " bytes";
@@ -151,22 +190,23 @@ ftxui::Component MakeConfigSummaryScreen(const config::SimulatorConfigLoadResult
                 });
             });
 
-            runtimeRows.push_back({telegram, runtime, cycleInput, rowRenderer});
+            state->runtimeRows.push_back({telegram, runtime, cycleInput, rowRenderer});
         }
     }
 
     std::vector<Component> controlRows;
-    controlRows.reserve(runtimeRows.size());
-    for (auto &row : runtimeRows)
+    controlRows.reserve(state->runtimeRows.size());
+    for (auto &row : state->runtimeRows)
     {
         controlRows.push_back(row.rowRenderer);
     }
 
     auto controlContainer = Container::Vertical(controlRows);
 
-    auto summaryRenderer = Renderer(controlContainer, [result, sourcePath, &runtimeRows, controlContainer, subscriberLog] {
+    auto summaryRenderer = Renderer(controlContainer, [result, sourcePath, state, controlContainer] {
         std::vector<Element> sections;
         sections.push_back(text("Configuration source: " + sourcePath));
+        sections.push_back(text("Press 'q' or Esc to quit") | color(Color::Yellow));
 
         if (result.hasErrors())
         {
@@ -189,20 +229,20 @@ ftxui::Component MakeConfigSummaryScreen(const config::SimulatorConfigLoadResult
         }
 
         std::vector<Element> controlRenders;
-        if (runtimeRows.empty())
+        if (state->runtimeRows.empty())
         {
             controlRenders.push_back(text("No PD telegrams available."));
         }
         else
         {
-            for (const auto &row : runtimeRows)
+            for (const auto &row : state->runtimeRows)
             {
                 controlRenders.push_back(row.rowRenderer->Render());
             }
         }
 
         std::vector<Element> subscriberRows;
-        for (const auto &entry : *subscriberLog)
+        for (const auto &entry : *state->subscriberLog)
         {
             subscriberRows.push_back(text(entry));
         }
@@ -219,6 +259,19 @@ ftxui::Component MakeConfigSummaryScreen(const config::SimulatorConfigLoadResult
         return vbox(sections) | border | flex;
     });
 
-    return summaryRenderer;
+    auto quittingRenderer = CatchEvent(summaryRenderer, [state, onQuit](const Event &event) {
+        if (event == Event::Character('q') || event == Event::Character('Q') || event == Event::Escape)
+        {
+            state->shutdown();
+            if (onQuit)
+            {
+                onQuit();
+            }
+            return true;
+        }
+        return false;
+    });
+
+    return quittingRenderer;
 }
 } // namespace trdp::ui

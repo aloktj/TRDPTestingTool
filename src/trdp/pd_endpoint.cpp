@@ -93,6 +93,13 @@ void PdEndpointRuntime::startPublishing(std::chrono::milliseconds cycleTime)
         util::logWarn(err.str());
     }
 
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        lastPublish_ = std::chrono::system_clock::now();
+    }
+
+    publishCount_.store(1);
+
     running_.store(true);
     worker_ = std::thread([this, cycleTime] { publishLoop(cycleTime); });
 
