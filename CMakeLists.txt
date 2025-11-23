@@ -41,6 +41,14 @@ add_library(trdp_config STATIC
 target_include_directories(trdp_config PUBLIC src)
 target_link_libraries(trdp_config PUBLIC tau_xml TRDP::trdp)
 
+add_library(trdp_runtime STATIC
+    src/trdp/trdp_session.cpp
+    src/trdp/pd_endpoint.cpp
+    src/util/logging.cpp
+)
+target_include_directories(trdp_runtime PUBLIC src)
+target_link_libraries(trdp_runtime PUBLIC trdp_config)
+
 add_executable(trdp_simulator
     src/main.cpp
     src/ui/screen_config_summary.cpp
@@ -51,6 +59,7 @@ target_link_libraries(
     trdp_simulator
     PRIVATE
         trdp_config
+        trdp_runtime
         tau_xml
         ftxui::component
         ftxui::dom
@@ -66,3 +75,11 @@ target_include_directories(xml_loader_test PRIVATE src)
 target_link_libraries(xml_loader_test PRIVATE trdp_config tau_xml)
 
 add_test(NAME xml_loader_test COMMAND xml_loader_test)
+
+add_executable(trdp_runtime_test
+    tests/trdp_runtime_test.cpp
+)
+target_include_directories(trdp_runtime_test PRIVATE src)
+target_link_libraries(trdp_runtime_test PRIVATE trdp_runtime trdp_config tau_xml)
+
+add_test(NAME trdp_runtime_test COMMAND trdp_runtime_test)
