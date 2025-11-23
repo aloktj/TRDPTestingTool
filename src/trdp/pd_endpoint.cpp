@@ -169,6 +169,7 @@ void PdEndpointRuntime::setSubscriptionSink(SubscriptionSink sink)
 {
     std::lock_guard<std::mutex> lock(mutex_);
     subscriptionSink_ = std::move(sink);
+    util::logInfo("Registered PD subscription sink");
 }
 
 void PdEndpointRuntime::setFixedPayload(std::vector<std::uint8_t> payload)

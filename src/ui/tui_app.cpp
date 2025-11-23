@@ -200,10 +200,10 @@ ftxui::Component BuildDatasetEditor(const config::SimulatorConfigLoadResult &res
         std::string status;
     };
 
-    std::vector<DatasetState> datasetStates;
+    std::vector<std::shared_ptr<DatasetState>> datasetStates;
     for (const auto &ds : result.config.datasets)
     {
-        DatasetState state{ds, std::vector<std::string>(ds.elements.size(), ""), ""};
+        auto state = std::make_shared<DatasetState>(DatasetState{ds, std::vector<std::string>(ds.elements.size(), ""), ""});
         datasetStates.push_back(std::move(state));
     }
 
@@ -213,17 +213,17 @@ ftxui::Component BuildDatasetEditor(const config::SimulatorConfigLoadResult &res
     for (auto &dsState : datasetStates)
     {
         std::vector<Component> elementRows;
-        for (std::size_t idx = 0; idx < dsState.dataset.elements.size(); ++idx)
+        for (std::size_t idx = 0; idx < dsState->dataset.elements.size(); ++idx)
         {
-            auto &element = dsState.dataset.elements[idx];
-            auto input = Input(&dsState.values[idx], element.name + " (hex bytes or text)");
-            auto clearButton = Button("Clear", [&dsState, idx] { dsState.values[idx].clear(); });
+            auto &element = dsState->dataset.elements[idx];
+            auto input = Input(&dsState->values[idx], element.name + " (hex bytes or text)");
+            auto clearButton = Button("Clear", [dsState, idx] { dsState->values[idx].clear(); });
             elementRows.push_back(Container::Horizontal({input, clearButton}));
         }
 
-        auto applyDataset = Button("Apply dataset", [&dsState, &context] {
+        auto applyDataset = Button("Apply dataset", [dsState, &context] {
             std::vector<std::uint8_t> payload;
-            for (const auto &value : dsState.values)
+            for (const auto &value : dsState->values)
             {
                 auto bytes = parseHexOrAscii(value);
                 payload.insert(payload.end(), bytes.begin(), bytes.end());
@@ -231,33 +231,33 @@ ftxui::Component BuildDatasetEditor(const config::SimulatorConfigLoadResult &res
 
             for (auto &row : context->pdRows)
             {
-                if (row.config.datasetId == dsState.dataset.id)
+                if (row.config.datasetId == dsState->dataset.id)
                 {
                     row.runtime->setFixedPayload(payload);
                 }
             }
 
             std::ostringstream oss;
-            oss << "Dataset " << dsState.dataset.id << " fixed to " << payload.size() << " bytes";
-            dsState.status = oss.str();
+            oss << "Dataset " << dsState->dataset.id << " fixed to " << payload.size() << " bytes";
+            dsState->status = oss.str();
         });
 
-        auto clearDataset = Button("Clear dataset override", [&dsState, &context] {
+        auto clearDataset = Button("Clear dataset override", [dsState, &context] {
             for (auto &row : context->pdRows)
             {
-                if (row.config.datasetId == dsState.dataset.id)
+                if (row.config.datasetId == dsState->dataset.id)
                 {
                     row.runtime->clearFixedPayload();
                 }
             }
-            dsState.status = "Dataset override cleared";
+            dsState->status = "Dataset override cleared";
         });
 
-        auto panel = Renderer(Container::Vertical(elementRows), [&dsState, elementRows, applyDataset, clearDataset] {
+        auto panel = Renderer(Container::Vertical(elementRows), [dsState, elementRows, applyDataset, clearDataset] {
             std::vector<Element> rows;
-            for (std::size_t idx = 0; idx < dsState.dataset.elements.size(); ++idx)
+            for (std::size_t idx = 0; idx < dsState->dataset.elements.size(); ++idx)
             {
-                const auto &element = dsState.dataset.elements[idx];
+                const auto &element = dsState->dataset.elements[idx];
                 rows.push_back(hbox({text(element.name + " : " + element.type +
                                          (element.arraySize > 1 ? "[" + std::to_string(element.arraySize) + "]" : "")),
                                      separator(),
@@ -266,12 +266,12 @@ ftxui::Component BuildDatasetEditor(const config::SimulatorConfigLoadResult &res
 
             rows.push_back(separator());
             rows.push_back(hbox({applyDataset->Render(), separator(), clearDataset->Render()}));
-            if (!dsState.status.empty())
+            if (!dsState->status.empty())
             {
-                rows.push_back(text(dsState.status) | color(Color::Green));
+                rows.push_back(text(dsState->status) | color(Color::Green));
             }
 
-            return window(text("Dataset " + std::to_string(dsState.dataset.id) + " - " + dsState.dataset.name),
+            return window(text("Dataset " + std::to_string(dsState->dataset.id) + " - " + dsState->dataset.name),
                           vbox(std::move(rows)));
         });
 
