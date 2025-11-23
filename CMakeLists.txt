@@ -1,8 +1,22 @@
 cmake_minimum_required(VERSION 3.16)
 project(TRDPTestingTool LANGUAGES CXX)
 
+option(TRDP_ENABLE_TESTS "Build TRDPTestingTool test targets" ON)
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+# Ensure required submodules are present to avoid missing-header build failures.
+set(TRDP_FTXUI_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/external/FTXUI")
+set(TRDP_TCNOPEN_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/external/TCNopen")
+
+if(NOT EXISTS "${TRDP_FTXUI_ROOT}/CMakeLists.txt")
+    message(FATAL_ERROR "FTXUI submodule not found. Please run: git submodule update --init --recursive")
+endif()
+
+if(NOT EXISTS "${TRDP_TCNOPEN_ROOT}/CMakeLists.txt")
+    message(FATAL_ERROR "TCNopen submodule not found. Please run: git submodule update --init --recursive")
+endif()
 
 # FTXUI configuration
 set(FTXUI_BUILD_EXAMPLES OFF CACHE BOOL "Disable upstream examples" FORCE)
@@ -41,6 +55,14 @@ add_library(trdp_config STATIC
 target_include_directories(trdp_config PUBLIC src)
 target_link_libraries(trdp_config PUBLIC tau_xml TRDP::trdp)
 
+add_library(trdp_runtime STATIC
+    src/trdp/trdp_session.cpp
+    src/trdp/pd_endpoint.cpp
+    src/util/logging.cpp
+)
+target_include_directories(trdp_runtime PUBLIC src)
+target_link_libraries(trdp_runtime PUBLIC trdp_config)
+
 add_executable(trdp_simulator
     src/main.cpp
     src/ui/screen_config_summary.cpp
@@ -51,18 +73,36 @@ target_link_libraries(
     trdp_simulator
     PRIVATE
         trdp_config
+        trdp_runtime
         tau_xml
         ftxui::component
         ftxui::dom
         ftxui::screen
 )
 
-enable_testing()
+if(TRDP_ENABLE_TESTS)
+    set(BUILD_TESTING ON CACHE BOOL "Enable CTest-based targets" FORCE)
+    include(CTest)
+    enable_testing()
 
-add_executable(xml_loader_test
-    tests/xml_loader_test.cpp
-)
-target_include_directories(xml_loader_test PRIVATE src)
-target_link_libraries(xml_loader_test PRIVATE trdp_config tau_xml)
+    add_executable(xml_loader_test EXCLUDE_FROM_ALL
+        tests/xml_loader_test.cpp
+    )
+    target_include_directories(xml_loader_test PRIVATE src)
+    target_link_libraries(xml_loader_test PRIVATE trdp_config tau_xml)
 
-add_test(NAME xml_loader_test COMMAND xml_loader_test)
+    add_executable(trdp_runtime_test EXCLUDE_FROM_ALL
+        tests/trdp_runtime_test.cpp
+    )
+    target_include_directories(trdp_runtime_test PRIVATE src)
+    target_link_libraries(trdp_runtime_test PRIVATE trdp_runtime trdp_config tau_xml)
+
+    add_custom_target(trdp_tests DEPENDS xml_loader_test trdp_runtime_test)
+
+    add_test(NAME xml_loader_test COMMAND xml_loader_test)
+    add_test(NAME trdp_runtime_test COMMAND trdp_runtime_test)
+
+    if(TARGET test)
+        add_dependencies(test trdp_tests)
+    endif()
+endif()
