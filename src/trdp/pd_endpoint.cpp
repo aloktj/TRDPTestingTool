@@ -19,11 +19,14 @@ std::vector<std::uint8_t> makePayload(std::uint64_t count)
     }
     return payload;
 }
-}
+} // namespace
 
-PdEndpointRuntime::PdEndpointRuntime(model::TelegramConfig config, std::shared_ptr<TrdpSession> session)
-    : config_(std::move(config)), session_(std::move(session))
+PdEndpointRuntime::PdEndpointRuntime(model::TelegramConfig config,
+                                     std::shared_ptr<TrdpSession> session,
+                                     std::string hostIp)
+    : config_(std::move(config)), session_(std::move(session)), hostIp_(std::move(hostIp))
 {
+    direction_ = classifyDirection(hostIp_, config_);
 }
 
 PdEndpointRuntime::~PdEndpointRuntime()
@@ -49,7 +52,9 @@ void PdEndpointRuntime::startPublishing(std::chrono::milliseconds cycleTime)
     }
 
     publishCount_.store(0);
+    receiveCount_.store(0);
     lastPublish_.reset();
+    lastReceive_.reset();
 
     destIp_ = resolveDestinationIp();
     publishBuffer_ = buildPayload(0U);
@@ -90,7 +95,7 @@ void PdEndpointRuntime::startPublishing(std::chrono::milliseconds cycleTime)
         util::logWarn(err.str());
     }
 
-    {
+    { 
         std::lock_guard<std::mutex> lock(mutex_);
         lastPublish_ = std::chrono::system_clock::now();
         publishCount_.store(1);
@@ -153,6 +158,17 @@ std::optional<std::chrono::system_clock::time_point> PdEndpointRuntime::lastPubl
     return lastPublish_;
 }
 
+std::optional<std::chrono::system_clock::time_point> PdEndpointRuntime::lastReceiveTime() const
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    return lastReceive_;
+}
+
+std::uint64_t PdEndpointRuntime::receiveCount() const
+{
+    return receiveCount_.load();
+}
+
 void PdEndpointRuntime::handleSubscription(const PdMessage &message)
 {
     std::ostringstream oss;
@@ -160,11 +176,12 @@ void PdEndpointRuntime::handleSubscription(const PdMessage &message)
     util::logDebug(oss.str());
 
     SubscriptionSink sink;
-    {
+    { 
         std::lock_guard<std::mutex> lock(mutex_);
         sink = subscriptionSink_;
-        lastPublish_ = message.timestamp;
-        publishCount_.fetch_add(1);
+        lastReceive_ = message.timestamp;
+        rxPayload_ = message.payload;
+        receiveCount_.fetch_add(1);
     }
 
     if (sink)
@@ -208,6 +225,39 @@ std::optional<std::size_t> PdEndpointRuntime::fixedPayloadSize() const
     return std::nullopt;
 }
 
+void PdEndpointRuntime::setTxPayload(std::vector<std::uint8_t> payload)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    txPayload_ = std::move(payload);
+}
+
+std::vector<std::uint8_t> PdEndpointRuntime::txPayload() const
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    return txPayload_;
+}
+
+std::vector<std::uint8_t> PdEndpointRuntime::rxPayload() const
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    return rxPayload_;
+}
+
+PdDirection PdEndpointRuntime::direction() const
+{
+    return direction_;
+}
+
+bool PdEndpointRuntime::canTransmit() const
+{
+    return direction_ == PdDirection::Outgoing || direction_ == PdDirection::Loopback;
+}
+
+bool PdEndpointRuntime::canReceive() const
+{
+    return direction_ == PdDirection::Incoming || direction_ == PdDirection::Loopback;
+}
+
 std::vector<std::uint8_t> PdEndpointRuntime::buildPayload(std::uint64_t count)
 {
     std::lock_guard<std::mutex> lock(mutex_);
@@ -216,7 +266,51 @@ std::vector<std::uint8_t> PdEndpointRuntime::buildPayload(std::uint64_t count)
         return *fixedPayload_;
     }
 
+    if (!txPayload_.empty())
+    {
+        return txPayload_;
+    }
+
     return makePayload(count);
+}
+
+PdDirection PdEndpointRuntime::classifyDirection(const std::string &hostIp, const model::TelegramConfig &config)
+{
+    const auto matchesHost = [&hostIp](const auto &endpoints) {
+        return std::any_of(endpoints.begin(), endpoints.end(), [&hostIp](const model::TelegramEndpoint &endpoint) {
+            return !endpoint.uriHost.empty() && endpoint.uriHost == hostIp;
+        });
+    };
+
+    bool asSource = matchesHost(config.sources);
+    bool asSink = matchesHost(config.destinations);
+
+    if (!asSource && !asSink)
+    {
+        if (config.exchangeType == "source" || config.exchangeType == "source+sink" || config.createEndpoint)
+        {
+            asSource = true;
+        }
+        if (config.exchangeType == "sink" || config.exchangeType == "source+sink")
+        {
+            asSink = true;
+        }
+    }
+
+    if (asSource && asSink)
+    {
+        return PdDirection::Loopback;
+    }
+    if (asSource)
+    {
+        return PdDirection::Outgoing;
+    }
+    if (asSink)
+    {
+        return PdDirection::Incoming;
+    }
+
+    return PdDirection::Unknown;
 }
 
 TRDP_IP_ADDR_T PdEndpointRuntime::resolveDestinationIp() const

@@ -194,7 +194,7 @@ ftxui::Component MakeConfigSummaryScreen(const config::SimulatorConfigLoadResult
         }
 
         sections.push_back(window(text("Interfaces"), vbox(interfacePanels)));
-        sections.push_back(window(text("PD Publisher Control"), vbox(controlRenders)));
+        sections.push_back(window(text("PD View"), vbox(controlRenders)));
         sections.push_back(window(text("Subscriber updates"), vbox(subscriberRows)));
         sections.push_back(window(text("Datasets"), BuildDatasetPanel(result)));
 

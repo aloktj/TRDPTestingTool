@@ -47,6 +47,7 @@ public:
 
     [[nodiscard]] TRDP_APP_SESSION_T appHandle() const;
     [[nodiscard]] TRDP_IP_ADDR_T hostAddress() const;
+    [[nodiscard]] const std::string &hostIpString() const;
 
 private:
     static void pdCallback(
