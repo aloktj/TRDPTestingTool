@@ -200,6 +200,11 @@ TRDP_IP_ADDR_T TrdpSession::hostAddress() const
     return hostAddr_;
 }
 
+const std::string &TrdpSession::hostIpString() const
+{
+    return config_.hostIp;
+}
+
 void TrdpSession::registerPdSubscriber(std::uint32_t comId, PdCallback callback)
 {
     std::lock_guard<std::mutex> lock(mutex_);

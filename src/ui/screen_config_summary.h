@@ -15,6 +15,7 @@ struct PdControlRow
     model::TelegramConfig config;
     std::shared_ptr<runtime::PdEndpointRuntime> runtime;
     std::shared_ptr<std::string> cycleInput;
+    std::shared_ptr<std::string> txInput;
     ftxui::Component rowRenderer;
 };
 
