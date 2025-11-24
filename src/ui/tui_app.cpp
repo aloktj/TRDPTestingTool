@@ -223,7 +223,7 @@ ftxui::Component BuildDatasetEditor(const config::SimulatorConfigLoadResult &res
             elementRows.push_back(Container::Horizontal({input, clearButton}));
         }
 
-        auto applyDataset = Button("Apply dataset", [dsState, &context] {
+        auto applyDataset = Button("Apply dataset", [dsState, context] {
             std::vector<std::uint8_t> payload;
             for (const auto &value : dsState->values)
             {
@@ -244,7 +244,7 @@ ftxui::Component BuildDatasetEditor(const config::SimulatorConfigLoadResult &res
             dsState->status = oss.str();
         });
 
-        auto clearDataset = Button("Clear dataset override", [dsState, &context] {
+        auto clearDataset = Button("Clear dataset override", [dsState, context] {
             for (auto &row : context->pdRows)
             {
                 if (row.config.datasetId == dsState->dataset.id)
