@@ -203,6 +203,28 @@ MD file transfer	☐
 TSN support	☐
 Statistics realtime view	☐
 No polling (select/event driven)	☐
+13. Build & Run
+
+Clone with submodules to ensure the bundled FTXUI and TCNopen stacks are available:
+
+```
+git clone --recurse-submodules <repo-url>
+```
+
+Then configure and build:
+
+```
+mkdir -p build
+cd build
+cmake ..
+cmake --build .
+```
+
+Run the simulator (provide a TRDP XML configuration path if different from `config.xml`):
+
+```
+./trdp_simulator external/TCNopen/trdp/example/example.xml
+```
 13. Future expansion
 
 MQTT-based remote control option
