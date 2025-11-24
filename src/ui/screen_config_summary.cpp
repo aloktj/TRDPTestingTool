@@ -1,11 +1,65 @@
 #include "ui/screen_config_summary.h"
 
+#include "trdp/pd_endpoint.h"
+#include "util/logging.h"
+
+#include <algorithm>
+#include <cstdlib>
 #include <ftxui/component/component.hpp>
-#include <ftxui/component/screen_interactive.hpp>
+#include <ftxui/component/event.hpp>
 #include <ftxui/dom/elements.hpp>
+#include <mutex>
+#include <memory>
+#include <sstream>
 
 namespace trdp::ui
 {
+void SimulatorRuntimeContext::shutdown()
+{
+    if (shutdownRequested)
+    {
+        return;
+    }
+
+    shutdownRequested = true;
+    for (auto &row : pdRows)
+    {
+        if (row.runtime)
+        {
+            row.runtime->stopPublishing();
+        }
+    }
+
+    for (auto &session : sessions)
+    {
+        if (session)
+        {
+            session->close();
+        }
+    }
+}
+
+void SimulatorRuntimeContext::appendSubscriberLog(std::string entry)
+{
+    std::lock_guard<std::mutex> lock(subscriberMutex);
+    subscriberLog.push_back(std::move(entry));
+    if (subscriberLog.size() > 50U)
+    {
+        subscriberLog.erase(subscriberLog.begin());
+    }
+}
+
+std::vector<std::string> SimulatorRuntimeContext::snapshotSubscriberLog() const
+{
+    std::lock_guard<std::mutex> lock(subscriberMutex);
+    return subscriberLog;
+}
+
+SimulatorRuntimeContext::~SimulatorRuntimeContext()
+{
+    shutdown();
+}
+
 namespace
 {
 ftxui::Element BuildInterfacePanel(const model::InterfaceConfig &iface)
@@ -62,7 +116,7 @@ ftxui::Element BuildDatasetPanel(const config::SimulatorConfigLoadResult &result
         }
 
         rows.push_back(window(text("Dataset " + std::to_string(dataset.id) + " - " + dataset.name),
-                              vbox(elements.empty() ? Elements{text("No members parsed.")} : elements)));
+                              vbox(elements.empty() ? ftxui::Elements{text("No members parsed.")} : elements)));
     }
 
     if (rows.empty())
@@ -74,13 +128,26 @@ ftxui::Element BuildDatasetPanel(const config::SimulatorConfigLoadResult &result
 }
 }
 
-ftxui::Component MakeConfigSummaryScreen(const config::SimulatorConfigLoadResult &result, const std::string &sourcePath)
+ftxui::Component MakeConfigSummaryScreen(const config::SimulatorConfigLoadResult &result,
+                                         const std::string &sourcePath,
+                                         const std::shared_ptr<SimulatorRuntimeContext> &runtime,
+                                         std::function<void()> onQuit)
 {
     using namespace ftxui; // NOLINT
 
-    auto summaryRenderer = Renderer([result, sourcePath] {
+    std::vector<Component> controlRows;
+    controlRows.reserve(runtime->pdRows.size());
+    for (auto &row : runtime->pdRows)
+    {
+        controlRows.push_back(row.rowRenderer);
+    }
+
+    auto controlContainer = Container::Vertical(controlRows);
+
+    auto summaryRenderer = Renderer(controlContainer, [result, sourcePath, runtime, controlContainer] {
         std::vector<Element> sections;
         sections.push_back(text("Configuration source: " + sourcePath));
+        sections.push_back(text("Press 'q' or Esc to quit") | color(Color::Yellow));
 
         if (result.hasErrors())
         {
@@ -102,12 +169,54 @@ ftxui::Component MakeConfigSummaryScreen(const config::SimulatorConfigLoadResult
             interfacePanels.push_back(text("No interfaces found."));
         }
 
+        std::vector<Element> controlRenders;
+        if (runtime->pdRows.empty())
+        {
+            controlRenders.push_back(text("No PD telegrams available."));
+        }
+        else
+        {
+            for (const auto &row : runtime->pdRows)
+            {
+                controlRenders.push_back(row.rowRenderer->Render());
+            }
+        }
+
+        std::vector<Element> subscriberRows;
+        const auto logSnapshot = runtime->snapshotSubscriberLog();
+        for (const auto &entry : logSnapshot)
+        {
+            subscriberRows.push_back(text(entry));
+        }
+        if (subscriberRows.empty())
+        {
+            subscriberRows.push_back(text("No PD updates received yet."));
+        }
+
         sections.push_back(window(text("Interfaces"), vbox(interfacePanels)));
+        sections.push_back(window(text("PD Publisher Control"), vbox(controlRenders)));
+        sections.push_back(window(text("Subscriber updates"), vbox(subscriberRows)));
         sections.push_back(window(text("Datasets"), BuildDatasetPanel(result)));
 
         return vbox(sections) | border | flex;
     });
 
-    return summaryRenderer;
+    auto quittingRenderer = CatchEvent(summaryRenderer, [runtime, onQuit](const Event &event) {
+        if (event == Event::Character('q') || event == Event::Character('Q') || event == Event::Escape)
+        {
+            if (runtime)
+            {
+                runtime->shutdown();
+            }
+            if (onQuit)
+            {
+                onQuit();
+            }
+            return true;
+        }
+        return false;
+    });
+
+    return quittingRenderer;
 }
 } // namespace trdp::ui
