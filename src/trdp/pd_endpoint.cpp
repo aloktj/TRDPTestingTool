@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <vos_sock.h>
 
+#include <future>
 #include <sstream>
 
 namespace trdp::runtime
@@ -28,10 +29,6 @@ PdEndpointRuntime::PdEndpointRuntime(model::TelegramConfig config, std::shared_p
 PdEndpointRuntime::~PdEndpointRuntime()
 {
     stopPublishing();
-    if (worker_.joinable())
-    {
-        worker_.join();
-    }
 }
 
 void PdEndpointRuntime::startPublishing(std::chrono::milliseconds cycleTime)
@@ -55,7 +52,7 @@ void PdEndpointRuntime::startPublishing(std::chrono::milliseconds cycleTime)
     lastPublish_.reset();
 
     destIp_ = resolveDestinationIp();
-    auto payload = buildPayload(0U);
+    publishBuffer_ = buildPayload(0U);
 
     const auto intervalUs = static_cast<UINT32>(std::max<std::int64_t>(1, cycleTime.count()) * 1000);
     const auto pubErr = tlp_publish(
@@ -73,8 +70,8 @@ void PdEndpointRuntime::startPublishing(std::chrono::milliseconds cycleTime)
         0U,
         TRDP_FLAGS_DEFAULT,
         nullptr,
-        payload.data(),
-        static_cast<UINT32>(payload.size()));
+        publishBuffer_.data(),
+        static_cast<UINT32>(publishBuffer_.size()));
 
     if (pubErr != TRDP_NO_ERR)
     {
@@ -96,12 +93,10 @@ void PdEndpointRuntime::startPublishing(std::chrono::milliseconds cycleTime)
     {
         std::lock_guard<std::mutex> lock(mutex_);
         lastPublish_ = std::chrono::system_clock::now();
+        publishCount_.store(1);
     }
 
-    publishCount_.store(1);
-
     running_.store(true);
-    worker_ = std::thread([this, cycleTime] { publishLoop(cycleTime); });
 
     std::ostringstream oss;
     oss << "Starting PD publisher for comId " << config_.comId << " every " << cycleTime.count() << " ms";
@@ -110,20 +105,31 @@ void PdEndpointRuntime::startPublishing(std::chrono::milliseconds cycleTime)
 
 void PdEndpointRuntime::stopPublishing()
 {
+    util::logDebug("stopPublishing invoked");
     const bool wasRunning = running_.exchange(false);
     if (wasRunning)
     {
-        cv_.notify_all();
-        if (worker_.joinable())
-        {
-            worker_.join();
-        }
-
         if (session_ != nullptr && session_->appHandle() != nullptr && pubHandle_ != nullptr)
         {
-            (void)tlp_unpublish(session_->appHandle(), pubHandle_);
+            auto *appHandle = session_->appHandle();
+            auto *pubHandle = pubHandle_;
+            util::logDebug("Calling tlp_unpublish");
+            auto future = std::async(std::launch::async, [appHandle, pubHandle] {
+                return tlp_unpublish(appHandle, pubHandle);
+            });
+
+            if (future.wait_for(std::chrono::milliseconds(500)) == std::future_status::ready)
+            {
+                (void)future.get();
+                util::logDebug("tlp_unpublish completed");
+            }
+            else
+            {
+                util::logWarn("tlp_unpublish timed out; continuing shutdown");
+            }
         }
         pubHandle_ = nullptr;
+        publishBuffer_.clear();
 
         std::ostringstream oss;
         oss << "Stopping PD publisher for comId " << config_.comId;
@@ -157,6 +163,8 @@ void PdEndpointRuntime::handleSubscription(const PdMessage &message)
     {
         std::lock_guard<std::mutex> lock(mutex_);
         sink = subscriptionSink_;
+        lastPublish_ = message.timestamp;
+        publishCount_.fetch_add(1);
     }
 
     if (sink)
@@ -198,38 +206,6 @@ std::optional<std::size_t> PdEndpointRuntime::fixedPayloadSize() const
         return fixedPayload_->size();
     }
     return std::nullopt;
-}
-
-void PdEndpointRuntime::publishLoop(std::chrono::milliseconds cycleTime)
-{
-    std::unique_lock<std::mutex> lock(mutex_);
-    while (running_.load())
-    {
-        const auto wakeTime = std::chrono::system_clock::now() + cycleTime;
-        cv_.wait_until(lock, wakeTime, [this] { return !running_.load(); });
-        if (!running_.load())
-        {
-            break;
-        }
-
-        lastPublish_ = std::chrono::system_clock::now();
-        const auto count = publishCount_.fetch_add(1) + 1;
-        auto payload = buildPayload(count);
-
-        lock.unlock();
-        const auto err = tlp_put(
-            session_->appHandle(),
-            pubHandle_,
-            payload.data(),
-            static_cast<UINT32>(payload.size()));
-        if (err != TRDP_NO_ERR)
-        {
-            std::ostringstream oss;
-            oss << "Failed to queue PD payload for comId " << config_.comId << " (error " << static_cast<int>(err) << ")";
-            util::logError(oss.str());
-        }
-        lock.lock();
-    }
 }
 
 std::vector<std::uint8_t> PdEndpointRuntime::buildPayload(std::uint64_t count)

@@ -44,7 +44,6 @@ public:
     [[nodiscard]] std::optional<std::size_t> fixedPayloadSize() const;
 
 private:
-    void publishLoop(std::chrono::milliseconds cycleTime);
     TRDP_IP_ADDR_T resolveDestinationIp() const;
     std::vector<std::uint8_t> buildPayload(std::uint64_t count);
 
@@ -52,12 +51,11 @@ private:
     std::shared_ptr<TrdpSession> session_;
     TRDP_PUB_T pubHandle_{nullptr};
     TRDP_IP_ADDR_T destIp_{0U};
-    std::thread worker_;
+    std::vector<std::uint8_t> publishBuffer_{};
     std::atomic<bool> running_{false};
     std::atomic<std::uint64_t> publishCount_{0};
     std::optional<std::chrono::system_clock::time_point> lastPublish_;
     std::optional<std::vector<std::uint8_t>> fixedPayload_{};
-    std::condition_variable cv_;
     mutable std::mutex mutex_;
     SubscriptionSink subscriptionSink_{};
 };

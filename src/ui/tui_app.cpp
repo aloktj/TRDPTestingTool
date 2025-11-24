@@ -129,15 +129,16 @@ std::shared_ptr<SimulatorRuntimeContext> BuildRuntimeContext(const config::Simul
                 runtime->handleSubscription(message);
             });
 
-            runtime->setSubscriptionSink([subscriberLog = context->subscriberLog, telegram](const runtime::PdMessage &message) {
+            runtime->setSubscriptionSink([context, telegram](const runtime::PdMessage &message) {
+                if (!context)
+                {
+                    return;
+                }
+
                 std::ostringstream oss;
                 oss << util::formatTimestamp(message.timestamp) << " | ComID " << telegram.comId << " → Dataset "
                     << telegram.datasetId << " | " << message.payload.size() << " bytes";
-                subscriberLog->push_back(oss.str());
-                if (subscriberLog->size() > 50U)
-                {
-                    subscriberLog->erase(subscriberLog->begin());
-                }
+                context->appendSubscriberLog(oss.str());
             });
 
             auto cycleInput = std::make_shared<std::string>("1000");

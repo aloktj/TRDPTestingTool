@@ -58,12 +58,30 @@ int main()
 
     PdEndpointRuntime runtime(telegram, session);
 
+    std::mutex mutex;
+    std::condition_variable cv;
+    std::uint64_t received{0};
+
+    session->registerPdSubscriber(kTestComId, [&](const PdMessage &) {
+        std::lock_guard<std::mutex> lock(mutex);
+        ++received;
+        cv.notify_all();
+    });
+
+    std::cout << "Starting publisher" << std::endl;
     runtime.startPublishing(std::chrono::milliseconds(20));
 
-    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    {
+        std::unique_lock<std::mutex> lock(mutex);
+        cv.wait_for(lock, std::chrono::milliseconds(500), [&] { return received >= 3U; });
+    }
 
+    std::cout << "Stopping publisher" << std::endl;
     runtime.stopPublishing();
+
+    std::cout << "Closing session" << std::endl;
     session->close();
+    std::cout << "Session closed" << std::endl;
 
     if (!runtime.lastPublishTime().has_value())
     {

@@ -8,6 +8,7 @@
 #include <ftxui/component/component.hpp>
 #include <ftxui/component/event.hpp>
 #include <ftxui/dom/elements.hpp>
+#include <mutex>
 #include <memory>
 #include <sstream>
 
@@ -36,6 +37,22 @@ void SimulatorRuntimeContext::shutdown()
             session->close();
         }
     }
+}
+
+void SimulatorRuntimeContext::appendSubscriberLog(std::string entry)
+{
+    std::lock_guard<std::mutex> lock(subscriberMutex);
+    subscriberLog.push_back(std::move(entry));
+    if (subscriberLog.size() > 50U)
+    {
+        subscriberLog.erase(subscriberLog.begin());
+    }
+}
+
+std::vector<std::string> SimulatorRuntimeContext::snapshotSubscriberLog() const
+{
+    std::lock_guard<std::mutex> lock(subscriberMutex);
+    return subscriberLog;
 }
 
 SimulatorRuntimeContext::~SimulatorRuntimeContext()
@@ -166,7 +183,8 @@ ftxui::Component MakeConfigSummaryScreen(const config::SimulatorConfigLoadResult
         }
 
         std::vector<Element> subscriberRows;
-        for (const auto &entry : *runtime->subscriberLog)
+        const auto logSnapshot = runtime->snapshotSubscriberLog();
+        for (const auto &entry : logSnapshot)
         {
             subscriberRows.push_back(text(entry));
         }

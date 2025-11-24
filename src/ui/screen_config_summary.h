@@ -6,6 +6,7 @@
 
 #include <ftxui/component/component.hpp>
 #include <functional>
+#include <mutex>
 
 namespace trdp::ui
 {
@@ -21,10 +22,13 @@ struct SimulatorRuntimeContext
 {
     std::vector<std::shared_ptr<runtime::TrdpSession>> sessions;
     std::vector<PdControlRow> pdRows;
-    std::shared_ptr<std::vector<std::string>> subscriberLog = std::make_shared<std::vector<std::string>>();
+    std::vector<std::string> subscriberLog;
+    mutable std::mutex subscriberMutex;
     bool shutdownRequested{false};
 
     void shutdown();
+    void appendSubscriberLog(std::string entry);
+    std::vector<std::string> snapshotSubscriberLog() const;
     ~SimulatorRuntimeContext();
 };
 
