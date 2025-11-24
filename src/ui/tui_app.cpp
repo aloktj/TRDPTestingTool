@@ -202,7 +202,7 @@ std::shared_ptr<SimulatorRuntimeContext> BuildRuntimeContext(const config::Simul
             auto txControls = ftxui::Container::Horizontal({txInputComponent, applyTxButton});
 
             auto rowRenderer = ftxui::Renderer(ftxui::Container::Vertical({controls, txControls}),
-                                               [runtime, telegram, controls, txControls] {
+                                               [runtime, telegram, controls, txControls]() -> ftxui::Element {
                                                    const auto lastPublish = runtime->lastPublishTime();
                                                    const auto lastReceive = runtime->lastReceiveTime();
                                                    auto fixedSize = runtime->fixedPayloadSize();
@@ -249,53 +249,51 @@ std::shared_ptr<SimulatorRuntimeContext> BuildRuntimeContext(const config::Simul
                                                    const auto rxPayloadHex = bytesToHex(rxPayloadBytes);
 
                                                    auto txPane = runtime->canTransmit()
-                                                                     ? ftxui::vbox({
+                                                                     ? ftxui::vbox(ftxui::Elements{
                                                                            ftxui::text("TX payload (" +
                                                                                        std::to_string(txPayloadBytes.size()) +
                                                                                        " bytes)") |
                                                                                ftxui::bold,
                                                                            txControls->Render() | ftxui::xflex,
-                                                                           ftxui::text(txPayloadHex.empty() ? "<empty>" : txPayloadHex) |
-                                                                               ftxui::wrap,
+                                                                           ftxui::paragraph(txPayloadHex.empty() ? "<empty>" : txPayloadHex),
                                                                        })
-                                                                     : ftxui::vbox({ftxui::text("Transmit disabled for this telegram")});
+                                                                     : ftxui::vbox(ftxui::Elements{ftxui::text("Transmit disabled for this telegram")});
 
                                                    auto rxPane = runtime->canReceive()
-                                                                     ? ftxui::vbox({
+                                                                     ? ftxui::vbox(ftxui::Elements{
                                                                            ftxui::text("Last RX payload (" +
                                                                                        std::to_string(rxPayloadBytes.size()) +
                                                                                        " bytes)") |
                                                                                ftxui::bold,
-                                                                           ftxui::text(rxPayloadHex.empty() ? "<no data yet>" :
-                                                                                                               rxPayloadHex) |
-                                                                               ftxui::wrap,
+                                                                           ftxui::paragraph(rxPayloadHex.empty() ? "<no data yet>" :
+                                                                                                               rxPayloadHex),
                                                                        })
-                                                                     : ftxui::vbox({ftxui::text("Receive disabled for this telegram")});
+                                                                     : ftxui::vbox(ftxui::Elements{ftxui::text("Receive disabled for this telegram")});
 
                                                    auto controlRender = runtime->canTransmit()
                                                                               ? controls->Render()
                                                                               : ftxui::text("TX controls disabled (receive-only)");
 
-                                                   return ftxui::vbox({
-                                                       ftxui::hbox({ftxui::text("ComID " + std::to_string(telegram.comId) +
-                                                                               " (Dataset " +
-                                                                               std::to_string(telegram.datasetId) + ")"),
+                                                   return ftxui::vbox(ftxui::Elements{
+                                                       ftxui::hbox(ftxui::Elements{ftxui::text("ComID " + std::to_string(telegram.comId) +
+                                                                                               " (Dataset " +
+                                                                                               std::to_string(telegram.datasetId) + ")"),
                                                                    ftxui::separator(),
                                                                    directionBadge}),
                                                        ftxui::separator(),
                                                        ftxui::text(txStatus),
                                                        ftxui::text(rxStatus),
                                                        ftxui::separator(),
-                                                       ftxui::hbox({ftxui::window(ftxui::text("TX"), txPane | ftxui::xflex),
-                                                                    ftxui::separator(),
-                                                                    ftxui::window(ftxui::text("RX"), rxPane | ftxui::xflex)}) |
+                                                       ftxui::hbox(ftxui::Elements{ftxui::window(ftxui::text("TX"), txPane | ftxui::xflex),
+                                                                                   ftxui::separator(),
+                                                                                   ftxui::window(ftxui::text("RX"), rxPane | ftxui::xflex)}) |
                                                            ftxui::xflex,
                                                        ftxui::separator(),
                                                        controlRender,
                                                    });
                                                });
 
-            context->pdRows.push_back({telegram, runtime, cycleInput, txInput, rowRenderer});
+            context->pdRows.push_back(PdControlRow{telegram, runtime, cycleInput, txInput, rowRenderer});
         }
     }
 
