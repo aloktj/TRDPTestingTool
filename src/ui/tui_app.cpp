@@ -9,6 +9,7 @@
 #include <cctype>
 #include <cstdint>
 #include <memory>
+#include <algorithm>
 #include <numeric>
 #include <sstream>
 #include <string>
