@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <memory>
 #include <algorithm>
+#include <iomanip>
 #include <numeric>
 #include <sstream>
 #include <string>
@@ -70,6 +71,37 @@ std::vector<std::uint8_t> parseHexOrAscii(const std::string &input)
     return bytes;
 }
 
+std::string bytesToHex(const std::vector<std::uint8_t> &bytes)
+{
+    std::ostringstream oss;
+    oss << std::uppercase << std::hex << std::setfill('0');
+    for (std::size_t i = 0; i < bytes.size(); ++i)
+    {
+        if (i > 0)
+        {
+            oss << ' ';
+        }
+        oss << std::setw(2) << static_cast<int>(bytes[i]);
+    }
+    return oss.str();
+}
+
+std::string directionLabel(runtime::PdDirection direction)
+{
+    switch (direction)
+    {
+    case runtime::PdDirection::Outgoing:
+        return "Outgoing";
+    case runtime::PdDirection::Incoming:
+        return "Incoming";
+    case runtime::PdDirection::Loopback:
+        return "Loopback";
+    case runtime::PdDirection::Unknown:
+    default:
+        return "Unknown";
+    }
+}
+
 ftxui::Component BuildDashboard(const config::SimulatorConfigLoadResult &result, const std::string &sourcePath)
 {
     using namespace ftxui; // NOLINT
@@ -125,7 +157,7 @@ std::shared_ptr<SimulatorRuntimeContext> BuildRuntimeContext(const config::Simul
 
         for (const auto &telegram : iface.telegrams)
         {
-            auto runtime = std::make_shared<runtime::PdEndpointRuntime>(telegram, session);
+            auto runtime = std::make_shared<runtime::PdEndpointRuntime>(telegram, session, iface.hostIp);
             session->registerPdSubscriber(telegram.comId, [runtime](const runtime::PdMessage &message) {
                 runtime->handleSubscription(message);
             });
@@ -144,46 +176,126 @@ std::shared_ptr<SimulatorRuntimeContext> BuildRuntimeContext(const config::Simul
 
             auto cycleInput = std::make_shared<std::string>("1000");
             auto cycleInputComponent = ftxui::Input(cycleInput.get(), "cycle ms");
+            auto txInput = std::make_shared<std::string>(bytesToHex(runtime->txPayload()));
+            auto txInputComponent = ftxui::Input(txInput.get(), "TX payload (hex bytes or text)");
+
             auto startButton = ftxui::Button("Start", [runtime, cycleInput] {
+                if (!runtime->canTransmit())
+                {
+                    return;
+                }
+
                 const auto ms = std::max(1L, std::strtol(cycleInput->c_str(), nullptr, 10));
                 runtime->startPublishing(std::chrono::milliseconds(ms));
             });
             auto stopButton = ftxui::Button("Stop", [runtime] { runtime->stopPublishing(); });
-
-            auto controls = ftxui::Container::Horizontal({cycleInputComponent, startButton, stopButton});
-
-            auto rowRenderer = ftxui::Renderer(controls, [runtime, telegram, controls] {
-                const auto lastPublish = runtime->lastPublishTime();
-                auto fixedSize = runtime->fixedPayloadSize();
-
-                auto statusBadge = ftxui::text(runtime->isPublishing() ? " RUNNING " : " STOPPED ") |
-                                  ftxui::bgcolor(runtime->isPublishing() ? ftxui::Color::Green : ftxui::Color::Red) |
-                                  ftxui::color(ftxui::Color::Black);
-
-                std::string status = runtime->isPublishing() ? "Publishing" : "Stopped";
-                if (lastPublish)
+            auto applyTxButton = ftxui::Button("Apply TX", [runtime, txInput] {
+                if (!runtime->canTransmit())
                 {
-                    status += " | last: " + util::formatTimestamp(*lastPublish);
-                }
-                status += " | count: " + std::to_string(runtime->publishCount());
-                if (fixedSize)
-                {
-                    status += " | fixed payload " + std::to_string(*fixedSize) + " bytes";
+                    return;
                 }
 
-                return ftxui::hbox({
-                    ftxui::text("ComID " + std::to_string(telegram.comId) + " (Dataset " +
-                                std::to_string(telegram.datasetId) + ")"),
-                    ftxui::separator(),
-                    statusBadge,
-                    ftxui::separator(),
-                    controls->Render() | ftxui::xflex,
-                    ftxui::separator(),
-                    ftxui::text(status),
-                });
+                runtime->setTxPayload(parseHexOrAscii(*txInput));
             });
 
-            context->pdRows.push_back({telegram, runtime, cycleInput, rowRenderer});
+            auto controls = ftxui::Container::Horizontal({cycleInputComponent, startButton, stopButton});
+            auto txControls = ftxui::Container::Horizontal({txInputComponent, applyTxButton});
+
+            auto rowRenderer = ftxui::Renderer(ftxui::Container::Vertical({controls, txControls}),
+                                               [runtime, telegram, controls, txControls] {
+                                                   const auto lastPublish = runtime->lastPublishTime();
+                                                   const auto lastReceive = runtime->lastReceiveTime();
+                                                   auto fixedSize = runtime->fixedPayloadSize();
+
+                                                   auto statusBadge = ftxui::text(runtime->isPublishing() ? " RUNNING " : " STOPPED ") |
+                                                                     ftxui::bgcolor(runtime->isPublishing()
+                                                                                        ? ftxui::Color::Green
+                                                                                        : ftxui::Color::Red) |
+                                                                     ftxui::color(ftxui::Color::Black);
+
+                                                   std::string txStatus = runtime->isPublishing() ? "Publishing" : "Stopped";
+                                                   if (lastPublish)
+                                                   {
+                                                       txStatus += " | last TX: " + util::formatTimestamp(*lastPublish);
+                                                   }
+                                                   txStatus += " | tx count: " + std::to_string(runtime->publishCount());
+                                                   if (fixedSize)
+                                                   {
+                                                       txStatus += " | fixed payload " + std::to_string(*fixedSize) +
+                                                                   " bytes";
+                                                   }
+
+                                                   std::string rxStatus = "RX count: " + std::to_string(runtime->receiveCount());
+                                                   if (lastReceive)
+                                                   {
+                                                       rxStatus += " | last RX: " + util::formatTimestamp(*lastReceive);
+                                                   }
+
+                                                   const auto direction = runtime->direction();
+                                                   const auto directionText = directionLabel(direction);
+                                                   auto directionBadge = ftxui::text(" " + directionText + " ") |
+                                                                         ftxui::bgcolor(direction == runtime::PdDirection::Loopback
+                                                                                            ? ftxui::Color::Yellow
+                                                                                            : direction == runtime::PdDirection::Outgoing
+                                                                                                ? ftxui::Color::Green
+                                                                                                : direction == runtime::PdDirection::Incoming
+                                                                                                    ? ftxui::Color::Blue
+                                                                                                    : ftxui::Color::GrayDark) |
+                                                                         ftxui::color(ftxui::Color::Black);
+
+                                                   const auto txPayloadBytes = runtime->txPayload();
+                                                   const auto rxPayloadBytes = runtime->rxPayload();
+                                                   const auto txPayloadHex = bytesToHex(txPayloadBytes);
+                                                   const auto rxPayloadHex = bytesToHex(rxPayloadBytes);
+
+                                                   auto txPane = runtime->canTransmit()
+                                                                     ? ftxui::vbox({
+                                                                           ftxui::text("TX payload (" +
+                                                                                       std::to_string(txPayloadBytes.size()) +
+                                                                                       " bytes)") |
+                                                                               ftxui::bold,
+                                                                           txControls->Render() | ftxui::xflex,
+                                                                           ftxui::text(txPayloadHex.empty() ? "<empty>" : txPayloadHex) |
+                                                                               ftxui::wrap,
+                                                                       })
+                                                                     : ftxui::vbox({ftxui::text("Transmit disabled for this telegram")});
+
+                                                   auto rxPane = runtime->canReceive()
+                                                                     ? ftxui::vbox({
+                                                                           ftxui::text("Last RX payload (" +
+                                                                                       std::to_string(rxPayloadBytes.size()) +
+                                                                                       " bytes)") |
+                                                                               ftxui::bold,
+                                                                           ftxui::text(rxPayloadHex.empty() ? "<no data yet>" :
+                                                                                                               rxPayloadHex) |
+                                                                               ftxui::wrap,
+                                                                       })
+                                                                     : ftxui::vbox({ftxui::text("Receive disabled for this telegram")});
+
+                                                   auto controlRender = runtime->canTransmit()
+                                                                              ? controls->Render()
+                                                                              : ftxui::text("TX controls disabled (receive-only)");
+
+                                                   return ftxui::vbox({
+                                                       ftxui::hbox({ftxui::text("ComID " + std::to_string(telegram.comId) +
+                                                                               " (Dataset " +
+                                                                               std::to_string(telegram.datasetId) + ")"),
+                                                                   ftxui::separator(),
+                                                                   directionBadge}),
+                                                       ftxui::separator(),
+                                                       ftxui::text(txStatus),
+                                                       ftxui::text(rxStatus),
+                                                       ftxui::separator(),
+                                                       ftxui::hbox({ftxui::window(ftxui::text("TX"), txPane | ftxui::xflex),
+                                                                    ftxui::separator(),
+                                                                    ftxui::window(ftxui::text("RX"), rxPane | ftxui::xflex)}) |
+                                                           ftxui::xflex,
+                                                       ftxui::separator(),
+                                                       controlRender,
+                                                   });
+                                               });
+
+            context->pdRows.push_back({telegram, runtime, cycleInput, txInput, rowRenderer});
         }
     }
 
