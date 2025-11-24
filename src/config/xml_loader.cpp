@@ -4,6 +4,7 @@
 #include <sstream>
 
 #include <tau_xml.h>
+#include <trdp_types.h>
 
 namespace trdp::config
 {
@@ -37,6 +38,57 @@ std::string makeErrorMessage(const std::string &context, TRDP_ERR_T error)
     std::ostringstream ss;
     ss << context << " (error " << static_cast<int>(error) << ")";
     return ss.str();
+}
+
+std::string datasetElementTypeToString(std::uint32_t rawType)
+{
+    const auto type = static_cast<TRDP_DATA_TYPE_T>(rawType);
+    switch (type)
+    {
+    case TRDP_INVALID:
+        return "INVALID";
+    case TRDP_BITSET8:
+        return "BITSET8";
+    case TRDP_CHAR8:
+        return "CHAR8";
+    case TRDP_UTF16:
+        return "UTF16";
+    case TRDP_INT8:
+        return "INT8";
+    case TRDP_INT16:
+        return "INT16";
+    case TRDP_INT32:
+        return "INT32";
+    case TRDP_INT64:
+        return "INT64";
+    case TRDP_UINT8:
+        return "UINT8";
+    case TRDP_UINT16:
+        return "UINT16";
+    case TRDP_UINT32:
+        return "UINT32";
+    case TRDP_UINT64:
+        return "UINT64";
+    case TRDP_REAL32:
+        return "REAL32";
+    case TRDP_REAL64:
+        return "REAL64";
+    case TRDP_TIMEDATE32:
+        return "TIMEDATE32";
+    case TRDP_TIMEDATE48:
+        return "TIMEDATE48";
+    case TRDP_TIMEDATE64:
+        return "TIMEDATE64";
+    case TRDP_TYPE_MAX:
+        break;
+    }
+
+    if (rawType > static_cast<std::uint32_t>(TRDP_TYPE_MAX))
+    {
+        return "DATASET " + std::to_string(rawType);
+    }
+
+    return std::to_string(rawType);
 }
 
 std::string uriUserToString(const TRDP_URI_USER_T *uri)
@@ -107,7 +159,7 @@ model::Dataset convertDataset(const TRDP_DATASET_T &dataset)
         model::DatasetElement converted{};
         converted.name = element.name != nullptr ? element.name : "";
         converted.arraySize = element.size;
-        converted.type = std::to_string(element.type);
+        converted.type = datasetElementTypeToString(element.type);
         result.elements.push_back(converted);
     }
     return result;
