@@ -255,7 +255,13 @@ ftxui::Component BuildDatasetEditor(const config::SimulatorConfigLoadResult &res
             dsState->status = "Dataset override cleared";
         });
 
-        auto panel = Renderer(Container::Vertical(elementRows), [dsState, elementRows, applyDataset, clearDataset] {
+        std::vector<Component> panelComponents = elementRows;
+        auto controlRow = Container::Horizontal({applyDataset, clearDataset});
+        panelComponents.push_back(controlRow);
+
+        auto panelContainer = Container::Vertical(std::move(panelComponents));
+
+        auto panel = Renderer(panelContainer, [dsState, elementRows, controlRow, applyDataset, clearDataset] {
             std::vector<Element> rows;
             for (std::size_t idx = 0; idx < dsState->dataset.elements.size(); ++idx)
             {
@@ -267,14 +273,14 @@ ftxui::Component BuildDatasetEditor(const config::SimulatorConfigLoadResult &res
             }
 
             rows.push_back(separator());
-            rows.push_back(hbox({applyDataset->Render(), separator(), clearDataset->Render()}));
+            rows.push_back(controlRow->Render());
             if (!dsState->status.empty())
             {
                 rows.push_back(text(dsState->status) | color(Color::Green));
             }
 
             return window(text("Dataset " + std::to_string(dsState->dataset.id) + " - " + dsState->dataset.name),
-                          vbox(std::move(rows)));
+                          vbox(std::move(rows)) | yframe | vscroll_indicator);
         });
 
         datasetPanels.push_back(panel);
@@ -286,7 +292,7 @@ ftxui::Component BuildDatasetEditor(const config::SimulatorConfigLoadResult &res
     }
 
     auto container = Container::Vertical(datasetPanels);
-    return Renderer(container, [container] { return vbox({container->Render() | flex}); });
+    return Renderer(container, [container] { return vbox({container->Render() | flex | yframe | vscroll_indicator}); });
 }
 } // namespace
 
