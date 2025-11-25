@@ -9,8 +9,17 @@ type TelegramRow = {
   comId: string
   name: string
   direction: string
+  datasetId: string
   lastRxTime: string
   status: 'OK' | 'Timeout' | string
+  decodedFields: DecodedField[]
+  rawHex: string
+}
+
+type DecodedField = {
+  name: string
+  type: string
+  value: string
 }
 
 const toStringValue = (value: unknown): string => {
@@ -42,6 +51,39 @@ const normalizeDirection = (value: unknown): string => {
   if (lower === 'loopback') return 'Loopback'
 
   return normalized
+}
+
+const normalizeDecodedField = (field: unknown): DecodedField | null => {
+  if (!field || typeof field !== 'object') return null
+
+  const record = field as Record<string, unknown>
+
+  const name =
+    toStringValue(record.field_name) || toStringValue(record.name) || toStringValue(record.label)
+  if (!name) return null
+
+  const type =
+    toStringValue(record.type) ||
+    toStringValue(record.field_type) ||
+    toStringValue(record.data_type) ||
+    '—'
+
+  const value =
+    record.value ?? record.val ?? record.data ?? record.raw_value ?? record.display_value ?? '—'
+
+  return {
+    name,
+    type,
+    value: toStringValue(value) || '—',
+  }
+}
+
+const normalizeDecodedFields = (fields: unknown): DecodedField[] => {
+  if (!Array.isArray(fields)) return []
+
+  return fields
+    .map((field) => normalizeDecodedField(field))
+    .filter((field): field is DecodedField => Boolean(field))
 }
 
 const formatTimestamp = (value: unknown): string => {
@@ -95,6 +137,22 @@ const normalizeTelegram = (telegram: RawTelegram, index: number): TelegramRow =>
       (telegram.flow as string | undefined)
   )
 
+  const datasetId =
+    (telegram.datasetId as string | number | undefined) ||
+    (telegram.datasetID as string | number | undefined) ||
+    (telegram.dataset_id as string | number | undefined) ||
+    (telegram.dataset as string | number | undefined) ||
+    '—'
+
+  const lastRx = (telegram.last_rx as RawTelegram | undefined) || (telegram.lastRx as RawTelegram | undefined)
+
+  const decodedFields = normalizeDecodedFields(
+    (lastRx?.decoded_fields as unknown) || (lastRx?.decodedFields as unknown)
+  )
+
+  const rawHex =
+    toStringValue((lastRx?.raw_hex as string | undefined) || (lastRx?.rawHex as string | undefined)) || '—'
+
   const lastRxTime = formatTimestamp(
     telegram.lastRxTime ||
       telegram.lastReceived ||
@@ -111,8 +169,11 @@ const normalizeTelegram = (telegram: RawTelegram, index: number): TelegramRow =>
     comId: String(comId),
     name,
     direction,
+    datasetId: String(datasetId),
     lastRxTime,
     status,
+    decodedFields,
+    rawHex,
   }
 }
 
@@ -240,6 +301,69 @@ export function PdView() {
           </tbody>
         </table>
       </div>
+
+      {selectedTelegram ? (
+        <div className="pd-detail">
+          <div className="pd-detail__header">
+            <div>
+              <p className="eyebrow">Telegram details</p>
+              <h3 className="pd-detail__title">{selectedTelegram.name}</h3>
+              <div className="pd-detail__meta">
+                <span>ComID {selectedTelegram.comId}</span>
+                <span aria-hidden="true">·</span>
+                <span>Dataset {selectedTelegram.datasetId}</span>
+                <span aria-hidden="true">·</span>
+                <span>{selectedTelegram.direction}</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="pd-detail__content">
+            <div className="pd-detail__section">
+              <div className="pd-detail__section-header">
+                <h4>Decoded fields</h4>
+                <p className="subtitle">Values parsed from the last received telegram.</p>
+              </div>
+              <div className="pd-detail__table-wrapper">
+                <table className="pd-detail__table">
+                  <thead>
+                    <tr>
+                      <th>Field Name</th>
+                      <th>Type</th>
+                      <th>Value</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {selectedTelegram.decodedFields.length === 0 ? (
+                      <tr>
+                        <td colSpan={3} className="pd-detail__empty">
+                          No decoded fields available.
+                        </td>
+                      </tr>
+                    ) : (
+                      selectedTelegram.decodedFields.map((field) => (
+                        <tr key={`${selectedTelegram.id}-${field.name}`}>
+                          <td>{field.name}</td>
+                          <td>{field.type}</td>
+                          <td>{field.value}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="pd-detail__section">
+              <div className="pd-detail__section-header">
+                <h4>Raw payload</h4>
+                <p className="subtitle">Hex-encoded data received with the last telegram.</p>
+              </div>
+              <pre className="code-block">{selectedTelegram.rawHex}</pre>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }
