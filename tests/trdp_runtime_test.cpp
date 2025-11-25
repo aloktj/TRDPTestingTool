@@ -56,7 +56,7 @@ int main()
     constexpr std::uint32_t kTestComId = 0x12345U;
     auto telegram = loopbackTelegram(kTestComId);
 
-    PdEndpointRuntime runtime(telegram, session);
+    PdEndpointRuntime runtime(telegram, session, session->hostIpString());
 
     std::mutex mutex;
     std::condition_variable cv;
