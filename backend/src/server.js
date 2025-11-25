@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const { randomUUID } = require('crypto');
 const TrdpConfigLoader = require('./trdpConfigLoader');
+const engineController = require('./engineController');
 
 const app = express();
 const port = process.env.PORT || 3001;
@@ -27,7 +28,7 @@ async function loadMetadata() {
     if (!data.trim()) {
       return [];
     }
-    return JSON.parse(data);
+    return JSON.parse(data).map((entry) => ({ ...entry, active: Boolean(entry.active) }));
   } catch (error) {
     console.error('Failed to read metadata file', error);
     return [];
@@ -59,7 +60,9 @@ const upload = multer({
 app.get('/api/configs', async (_req, res) => {
   try {
     const metadata = await loadMetadata();
-    res.json(metadata.map(({ id, filename, uploadedAt }) => ({ id, filename, uploadedAt })));
+    res.json(
+      metadata.map(({ id, filename, uploadedAt, active }) => ({ id, filename, uploadedAt, active }))
+    );
   } catch (error) {
     console.error('Failed to load configs', error);
     res.status(500).json({ message: 'Failed to read configuration list.' });
@@ -102,13 +105,53 @@ app.post('/api/configs/upload', upload.single('file'), async (req, res) => {
   try {
     await fs.promises.writeFile(filePath, buffer);
     const metadata = await loadMetadata();
-    metadata.push({ id, filename: originalname, storedName, uploadedAt });
+    metadata.push({ id, filename: originalname, storedName, uploadedAt, active: false });
     await saveMetadata(metadata);
 
     res.status(201).json({ id, filename: originalname, uploadedAt });
   } catch (error) {
     console.error('Failed to save uploaded file', error);
     res.status(500).json({ message: 'Failed to store configuration file.' });
+  }
+});
+
+app.post('/api/configs/:id/activate', async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const metadata = await loadMetadata();
+    const targetIndex = metadata.findIndex((item) => item.id === id);
+
+    if (targetIndex === -1) {
+      return res.status(404).json({ message: 'Configuration not found.' });
+    }
+
+    const entry = metadata[targetIndex];
+    const filePath = path.join(configsDir, entry.storedName || entry.filename);
+
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ message: 'Stored configuration file is missing.' });
+    }
+
+    const xmlContent = await fs.promises.readFile(filePath, 'utf8');
+    await engineController.loadConfig(xmlContent);
+    await engineController.restart();
+
+    const updatedMetadata = metadata.map((item, index) => ({
+      ...item,
+      active: index === targetIndex,
+    }));
+
+    await saveMetadata(updatedMetadata);
+
+    res.json({
+      message: 'Configuration activated.',
+      id: entry.id,
+      filename: entry.filename,
+    });
+  } catch (error) {
+    console.error('Failed to activate configuration', error);
+    res.status(500).json({ message: 'Failed to activate configuration.' });
   }
 });
 

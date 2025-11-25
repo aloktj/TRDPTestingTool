@@ -12,6 +12,13 @@ This backend provides basic configuration upload and listing APIs used by the si
 - `GET /api/configs`
   - Returns `{ id, filename, uploadedAt }` for every uploaded configuration.
 
+- `GET /api/configs/{id}/summary`
+  - Parses the stored XML to return device, interface, and dataset summaries.
+
+- `POST /api/configs/{id}/activate`
+  - Loads the stored XML into the TRDP engine and restarts it with the new configuration.
+  - Marks the chosen configuration as active in `configs/metadata.json`.
+
 Run the service locally with:
 
 ```
