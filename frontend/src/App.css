@@ -1,0 +1,142 @@
+.app-shell {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  min-height: 100vh;
+  background: linear-gradient(135deg, #0b1c2c 0%, #162b3f 50%, #0f1e2e 100%);
+  color: #e9eff6;
+}
+
+.sidebar {
+  background: rgba(7, 17, 27, 0.9);
+  border-right: 1px solid rgba(255, 255, 255, 0.05);
+  padding: 2.5rem 1.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+  box-shadow: 8px 0 30px rgba(0, 0, 0, 0.25);
+}
+
+.sidebar__brand {
+  font-size: 1.35rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+.sidebar__nav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.nav-link {
+  color: #cbd5e1;
+  text-decoration: none;
+  font-weight: 600;
+  padding: 0.8rem 0.9rem;
+  border-radius: 12px;
+  transition: background-color 180ms ease, color 180ms ease;
+}
+
+.nav-link:hover,
+.nav-link:focus-visible {
+  background-color: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+  outline: none;
+}
+
+.main {
+  padding: 2.5rem 3rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.main__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+}
+
+.eyebrow {
+  font-size: 0.85rem;
+  color: #8fb0d8;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  margin: 0;
+}
+
+h1 {
+  margin: 0.2rem 0 0.4rem;
+  font-size: 2.2rem;
+}
+
+.subtitle {
+  margin: 0;
+  max-width: 720px;
+  color: #cbd5e1;
+}
+
+.status-pill {
+  background: rgba(78, 206, 113, 0.15);
+  color: #6ce59b;
+  padding: 0.55rem 1rem;
+  border-radius: 999px;
+  border: 1px solid rgba(108, 229, 155, 0.4);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  font-size: 0.75rem;
+}
+
+.main__content {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1.25rem;
+}
+
+.panel {
+  background: rgba(15, 30, 46, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 16px;
+  padding: 1.5rem;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.2);
+}
+
+.panel h2 {
+  margin: 0 0 0.75rem;
+}
+
+.panel p {
+  margin: 0;
+  color: #d9e3f0;
+}
+
+.panel ul {
+  margin: 0.5rem 0 0;
+  padding-left: 1.1rem;
+  color: #d9e3f0;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.highlight {
+  color: #7bd6ff;
+  font-weight: 700;
+}
+
+@media (max-width: 900px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .main {
+    padding: 1.5rem;
+  }
+}
