@@ -1,4 +1,5 @@
 import './App.css'
+import PdView from './components/PdView'
 
 function App() {
   return (
@@ -7,6 +8,9 @@ function App() {
         <div className="sidebar__brand">TRDP Testing Tool</div>
         <nav className="sidebar__nav">
           <a className="nav-link" href="#">Overview</a>
+          <a className="nav-link" href="#" aria-current="page">
+            PD telegrams
+          </a>
           <a className="nav-link" href="#">Scenarios</a>
           <a className="nav-link" href="#">Reports</a>
           <a className="nav-link" href="#">Settings</a>
@@ -15,31 +19,14 @@ function App() {
       <main className="main">
         <header className="main__header">
           <div>
-            <p className="eyebrow">Welcome</p>
-            <h1>Project Dashboard</h1>
-            <p className="subtitle">
-              Start exploring the TRDP data, manage scenarios, and review results in a unified
-              workspace.
-            </p>
+            <p className="eyebrow">Runtime explorer</p>
+            <h1>Process Data telegrams</h1>
+            <p className="subtitle">Monitor TRDP PD telegrams and pick one to inspect its latest activity.</p>
           </div>
           <div className="status-pill">Connected</div>
         </header>
-        <section className="main__content">
-          <div className="panel">
-            <h2>Next steps</h2>
-            <ul>
-              <li>Configure your connection to the backend API.</li>
-              <li>Load or create a scenario to begin testing.</li>
-              <li>Review the latest runs and share reports with your team.</li>
-            </ul>
-          </div>
-          <div className="panel">
-            <h2>Backend proxy</h2>
-            <p>
-              Requests to <code>/api/*</code> are proxied to the Drogon backend on{' '}
-              <span className="highlight">localhost:8080</span> when running the dev server.
-            </p>
-          </div>
+        <section className="main__content main__content--full">
+          <PdView />
         </section>
       </main>
     </div>
