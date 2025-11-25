@@ -42,3 +42,7 @@ build/
 
 # debug information files
 *.dwo
+
+# Backend artifacts
+backend/node_modules/
+backend/configs/
