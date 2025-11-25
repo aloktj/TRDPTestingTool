@@ -13,6 +13,17 @@ type TelegramRow = {
   status: 'OK' | 'Timeout' | string
 }
 
+type DatasetField = {
+  name: string
+  type: string
+  value: number | string
+}
+
+type TelegramDetails = {
+  enabled: boolean
+  fields: DatasetField[]
+}
+
 const toStringValue = (value: unknown): string => {
   if (value === null || value === undefined) return ''
   if (typeof value === 'string') return value
@@ -121,6 +132,12 @@ export function PdView() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string>('')
+  const [details, setDetails] = useState<TelegramDetails | null>(null)
+  const [detailsError, setDetailsError] = useState('')
+  const [detailsLoading, setDetailsLoading] = useState(false)
+  const [pendingValues, setPendingValues] = useState<Record<string, string>>({})
+  const [savingValues, setSavingValues] = useState(false)
+  const [enableUpdating, setEnableUpdating] = useState(false)
 
   useEffect(() => {
     let mounted = true
@@ -167,6 +184,134 @@ export function PdView() {
     [selectedId, telegrams]
   )
 
+  useEffect(() => {
+    if (!selectedTelegram) {
+      setDetails(null)
+      setDetailsError('')
+      setPendingValues({})
+      return
+    }
+
+    const fetchDetails = async () => {
+      setDetailsLoading(true)
+      setDetailsError('')
+
+      try {
+        const response = await fetch(`/api/pd/${selectedTelegram.comId}/values`)
+        if (!response.ok) {
+          throw new Error(`Failed to load details (status ${response.status})`)
+        }
+
+        const payload = await response.json()
+        const enabled = Boolean(payload.enabled ?? payload.enable ?? payload.txEnabled ?? true)
+
+        const fields: DatasetField[] = Array.isArray(payload.fields)
+          ? (payload.fields as DatasetField[])
+          : Object.entries((payload.values as Record<string, number | string> | undefined) ?? {}).map(
+              ([name, value]) => ({
+                name,
+                type: typeof value,
+                value,
+              })
+            )
+
+        setDetails({ enabled, fields })
+        setPendingValues(
+          fields.reduce<Record<string, string>>((acc, field) => {
+            acc[field.name] = toStringValue(field.value)
+            return acc
+          }, {})
+        )
+      } catch (detailsError) {
+        setDetailsError(
+          detailsError instanceof Error ? detailsError.message : 'Unable to load telegram details'
+        )
+        setDetails(null)
+        setPendingValues({})
+      } finally {
+        setDetailsLoading(false)
+      }
+    }
+
+    fetchDetails()
+  }, [selectedTelegram])
+
+  const toggleEnable = async () => {
+    if (!selectedTelegram || !details) return
+
+    const nextEnabled = !details.enabled
+    setEnableUpdating(true)
+    setDetails((prev) => (prev ? { ...prev, enabled: nextEnabled } : prev))
+
+    try {
+      const response = await fetch(`/api/pd/${selectedTelegram.comId}/enable`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ enable: nextEnabled }),
+      })
+
+      if (!response.ok) {
+        throw new Error(`Enable request failed (status ${response.status})`)
+      }
+    } catch (enableError) {
+      setDetails((prev) => (prev ? { ...prev, enabled: !nextEnabled } : prev))
+      setDetailsError(
+        enableError instanceof Error ? enableError.message : 'Unable to update enable state'
+      )
+    } finally {
+      setEnableUpdating(false)
+    }
+  }
+
+  const onChangeValue = (fieldName: string, value: string) => {
+    setPendingValues((prev) => ({ ...prev, [fieldName]: value }))
+  }
+
+  const applyValues = async () => {
+    if (!selectedTelegram || !details) return
+
+    setSavingValues(true)
+    setDetailsError('')
+
+    const numericValues: Record<string, number> = {}
+    Object.entries(pendingValues).forEach(([key, value]) => {
+      const parsed = Number(value)
+      numericValues[key] = Number.isNaN(parsed) ? 0 : parsed
+    })
+
+    try {
+      const response = await fetch(`/api/pd/${selectedTelegram.comId}/values`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ values: numericValues }),
+      })
+
+      if (!response.ok) {
+        throw new Error(`Failed to save values (status ${response.status})`)
+      }
+
+      setDetails((prev) =>
+        prev
+          ? {
+              ...prev,
+              fields: prev.fields.map((field) => ({
+                ...field,
+                value: numericValues[field.name] ?? field.value,
+              })),
+            }
+          : prev
+      )
+    } catch (saveError) {
+      setDetailsError(saveError instanceof Error ? saveError.message : 'Unable to save values')
+    } finally {
+      setSavingValues(false)
+    }
+  }
+
   return (
     <div className="panel pd-view">
       <div className="pd-view__header">
@@ -191,54 +336,125 @@ export function PdView() {
       {error ? <div className="alert alert--error">{error}</div> : null}
       {loading ? <div className="alert">Loading telegrams…</div> : null}
 
-      <div className="pd-table-wrapper">
-        <table className="pd-table">
-          <thead>
-            <tr>
-              <th>Interface</th>
-              <th>ComID</th>
-              <th>Name</th>
-              <th>Direction</th>
-              <th>Last Rx Time</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {telegrams.length === 0 && !loading ? (
+      <div className="pd-layout">
+        <div className="pd-table-wrapper">
+          <table className="pd-table">
+            <thead>
               <tr>
-                <td colSpan={6} className="pd-table__empty">
-                  No telegrams available.
-                </td>
+                <th>Interface</th>
+                <th>ComID</th>
+                <th>Name</th>
+                <th>Direction</th>
+                <th>Last Rx Time</th>
+                <th>Status</th>
               </tr>
-            ) : null}
-            {telegrams.map((telegram) => {
-              const isSelected = telegram.id === selectedId
-              const statusText = normalizeStatus(telegram.status)
-              const isTimeout = statusText.toLowerCase() === 'timeout'
-
-              return (
-                <tr
-                  key={telegram.id}
-                  className={isSelected ? 'is-selected' : undefined}
-                  onClick={() => setSelectedId(telegram.id)}
-                >
-                  <td>{telegram.interfaceName}</td>
-                  <td>{telegram.comId}</td>
-                  <td>{telegram.name}</td>
-                  <td>
-                    <span className="pill pill--muted">{telegram.direction}</span>
-                  </td>
-                  <td>{telegram.lastRxTime}</td>
-                  <td>
-                    <span className={`pill ${isTimeout ? 'pill--danger' : 'pill--success'}`}>
-                      {isTimeout ? 'Timeout' : 'OK'}
-                    </span>
+            </thead>
+            <tbody>
+              {telegrams.length === 0 && !loading ? (
+                <tr>
+                  <td colSpan={6} className="pd-table__empty">
+                    No telegrams available.
                   </td>
                 </tr>
-              )
-            })}
-          </tbody>
-        </table>
+              ) : null}
+              {telegrams.map((telegram) => {
+                const isSelected = telegram.id === selectedId
+                const statusText = normalizeStatus(telegram.status)
+                const isTimeout = statusText.toLowerCase() === 'timeout'
+
+                return (
+                  <tr
+                    key={telegram.id}
+                    className={isSelected ? 'is-selected' : undefined}
+                    onClick={() => setSelectedId(telegram.id)}
+                  >
+                    <td>{telegram.interfaceName}</td>
+                    <td>{telegram.comId}</td>
+                    <td>{telegram.name}</td>
+                    <td>
+                      <span className="pill pill--muted">{telegram.direction}</span>
+                    </td>
+                    <td>{telegram.lastRxTime}</td>
+                    <td>
+                      <span className={`pill ${isTimeout ? 'pill--danger' : 'pill--success'}`}>
+                        {isTimeout ? 'Timeout' : 'OK'}
+                      </span>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="pd-detail panel">
+          <div className="pd-detail__header">
+            <div>
+              <p className="eyebrow">PD detail</p>
+              <h3 className="pd-detail__title">{selectedTelegram?.name ?? 'Select a telegram'}</h3>
+              <p className="pd-detail__meta">
+                {selectedTelegram
+                  ? `ComID ${selectedTelegram.comId} · ${selectedTelegram.direction}`
+                  : 'Choose a telegram from the table to view more details.'}
+              </p>
+            </div>
+
+            <button
+              className={`button ${details?.enabled ? 'button--success' : 'button--muted'}`}
+              onClick={toggleEnable}
+              disabled={!selectedTelegram || !details || enableUpdating}
+            >
+              {enableUpdating
+                ? 'Updating…'
+                : details?.enabled
+                  ? 'Disable Tx'
+                  : 'Enable Tx'}
+            </button>
+          </div>
+
+          {detailsError ? <div className="alert alert--error">{detailsError}</div> : null}
+          {detailsLoading ? <div className="alert">Loading details…</div> : null}
+
+          <div className="pd-detail__body">
+            <h4>Edit Tx Values</h4>
+            {details && details.fields.length === 0 ? (
+              <p className="pd-detail__empty">No dataset fields available.</p>
+            ) : null}
+
+            <div className="pd-detail__form">
+              {details?.fields.map((field) => {
+                const inputType = field.type.toLowerCase().includes('int') ||
+                  field.type.toLowerCase().includes('float') ||
+                  field.type.toLowerCase().includes('double') ||
+                  field.type.toLowerCase().includes('number')
+                  ? 'number'
+                  : 'text'
+
+                return (
+                  <label key={field.name} className="pd-detail__field">
+                    <span className="pd-detail__field-label">{field.name}</span>
+                    <input
+                      type={inputType}
+                      value={pendingValues[field.name] ?? ''}
+                      onChange={(event) => onChangeValue(field.name, event.target.value)}
+                    />
+                    <span className="pd-detail__field-hint">{field.type}</span>
+                  </label>
+                )
+              })}
+            </div>
+          </div>
+
+          <div className="pd-detail__footer">
+            <button
+              className="button button--primary"
+              onClick={applyValues}
+              disabled={!details || details.fields.length === 0 || savingValues}
+            >
+              {savingValues ? 'Applying…' : 'Apply'}
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   )
