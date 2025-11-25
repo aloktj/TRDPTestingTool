@@ -3,6 +3,7 @@ const multer = require('multer');
 const fs = require('fs');
 const path = require('path');
 const { randomUUID } = require('crypto');
+const TrdpConfigLoader = require('./trdpConfigLoader');
 
 const app = express();
 const port = process.env.PORT || 3001;
@@ -62,6 +63,27 @@ app.get('/api/configs', async (_req, res) => {
   } catch (error) {
     console.error('Failed to load configs', error);
     res.status(500).json({ message: 'Failed to read configuration list.' });
+  }
+});
+
+app.get('/api/configs/:id/summary', async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const metadata = await loadMetadata();
+    const entry = metadata.find((item) => item.id === id);
+    if (!entry) {
+      return res.status(404).json({ message: 'Configuration not found.' });
+    }
+
+    const filePath = path.join(configsDir, entry.storedName || entry.filename);
+    const loader = new TrdpConfigLoader();
+    const summary = await loader.loadSummary(filePath);
+
+    res.json(summary);
+  } catch (error) {
+    console.error('Failed to load configuration summary', error);
+    res.status(500).json({ message: 'Failed to parse configuration file.' });
   }
 });
 
