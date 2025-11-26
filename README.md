@@ -205,6 +205,29 @@ Statistics realtime view	☐
 No polling (select/event driven)	☐
 13. Build & Run
 
+### Quick start (Linux)
+
+After cloning the repository, you can build and launch the simulator with a single command from the repo root:
+
+```
+scripts/build_and_run.sh
+```
+
+The script will:
+
+* Initialize/update the bundled submodules (FTXUI, TCNopen)
+* Configure the CMake project (defaults to Release build in `./build`)
+* Build the default target (`trdp_simulator`) and launch it
+
+Environment overrides:
+
+* `BUILD_DIR` – custom build directory (default: `./build`)
+* `BUILD_TYPE` – CMake build type (default: `Release`)
+* `TARGET` – CMake target to build (default: `trdp_simulator`)
+* `SKIP_RUN` – set to skip launching after a successful build
+
+### Manual build
+
 Clone with submodules to ensure the bundled FTXUI and TCNopen stacks are available:
 
 ```
